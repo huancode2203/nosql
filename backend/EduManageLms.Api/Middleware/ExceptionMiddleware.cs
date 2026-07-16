@@ -1,0 +1,3 @@
+using System.Text.Json; using EduManageLms.Api.Common;
+namespace EduManageLms.Api.Middleware;
+public sealed class ExceptionMiddleware(RequestDelegate next,ILogger<ExceptionMiddleware> log,IHostEnvironment env){public async Task InvokeAsync(HttpContext context){try{await next(context);}catch(Exception ex){var status=ex is AppException a?a.StatusCode:500;if(status>=500)log.LogError(ex,"Unhandled exception");context.Response.StatusCode=status;context.Response.ContentType="application/json";var message=status==500&&!env.IsDevelopment()?"Đã xảy ra lỗi hệ thống":ex.Message;await context.Response.WriteAsync(JsonSerializer.Serialize(ApiResponse<object>.Fail(message),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));}}}

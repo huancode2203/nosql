@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EduManageLms.Api", "backend\EduManageLms.Api\EduManageLms.Api.csproj", "{78C037B7-5FD0-4CF6-8E33-8DFF8C3FC410}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EduManageLms.Tests", "backend\EduManageLms.Tests\EduManageLms.Tests.csproj", "{6190B34B-FA24-4C4D-BCDF-462EC20A9636}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{78C037B7-5FD0-4CF6-8E33-8DFF8C3FC410}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78C037B7-5FD0-4CF6-8E33-8DFF8C3FC410}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78C037B7-5FD0-4CF6-8E33-8DFF8C3FC410}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78C037B7-5FD0-4CF6-8E33-8DFF8C3FC410}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6190B34B-FA24-4C4D-BCDF-462EC20A9636}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6190B34B-FA24-4C4D-BCDF-462EC20A9636}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6190B34B-FA24-4C4D-BCDF-462EC20A9636}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6190B34B-FA24-4C4D-BCDF-462EC20A9636}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,2 @@
+import { Component, input } from '@angular/core'; import { RouterLink } from '@angular/router';
+@Component({standalone:true,imports:[RouterLink],template:`<div class="error-page"><div class="brand-mark">E</div><h1>{{code()}}</h1><h2>{{title()}}</h2><p>{{message()}}</p><a class="primary-button" routerLink="/">Quay về trang chủ</a></div>`}) export class ErrorPageComponent{code=input('404');title=input('Không tìm thấy trang');message=input('Trang bạn yêu cầu không tồn tại hoặc đã được di chuyển.');}

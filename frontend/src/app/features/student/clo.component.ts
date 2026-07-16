@@ -1,0 +1,3 @@
+import { Component, OnInit, signal } from '@angular/core'; import { ApiService } from '../../core/services/api.service'; import { PageHeaderComponent } from '../../shared/page-header.component';
+interface Clo{courseCode:string;courseName:string;cloCode:string;description:string;percentage:number;threshold:number;passed:boolean;contributingComponents:string[]}
+@Component({standalone:true,imports:[PageHeaderComponent],templateUrl:'./clo.component.html'}) export class CloComponent implements OnInit{items=signal<Clo[]>([]);constructor(private api:ApiService){}ngOnInit(){this.api.get<Clo[]>('/student/clo-results').subscribe(r=>this.items.set(r.data))}}

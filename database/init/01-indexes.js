@@ -1,0 +1,16 @@
+const dbName = process.env.MONGO_INITDB_DATABASE || 'EduManageLms';
+const lms = db.getSiblingDB(dbName);
+lms.users.createIndex({ username: 1 }, { unique: true, name: 'ux_users_username' });
+lms.users.createIndex({ email: 1 }, { unique: true, name: 'ux_users_email' });
+lms.users.createIndex({ role: 1, status: 1 }, { name: 'ix_users_role_status' });
+lms.students.createIndex({ studentCode: 1 }, { unique: true, name: 'ux_students_studentCode' });
+lms.students.createIndex({ 'academicRecords.academicYearId': 1, 'academicRecords.semesters.semesterId': 1 }, { name: 'ix_students_year_semester' });
+lms.lecturers.createIndex({ lecturerCode: 1 }, { unique: true, name: 'ux_lecturers_lecturerCode' });
+lms.courses.createIndex({ courseCode: 1 }, { unique: true, name: 'ux_courses_courseCode' });
+lms.classSections.createIndex({ classSectionCode: 1 }, { unique: true, name: 'ux_sections_code' });
+lms.classSections.createIndex({ academicYearId: 1, semesterId: 1, lecturerId: 1 }, { name: 'ix_sections_year_semester_lecturer' });
+lms.notifications.createIndex({ recipientIds: 1 }, { name: 'ix_notifications_recipients' });
+lms.notifications.createIndex({ createdAt: -1 }, { name: 'ix_notifications_createdAt' });
+lms.auditLogs.createIndex({ createdAt: -1 }, { name: 'ix_audit_createdAt' });
+lms.passwordResetTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl_password_reset' });
+print('MongoDB indexes created for ' + dbName);

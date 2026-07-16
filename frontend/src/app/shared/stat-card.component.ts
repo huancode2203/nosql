@@ -1,0 +1,2 @@
+import { Component,input } from '@angular/core';
+@Component({selector:'app-stat-card',standalone:true,template:`<article class="stat-card" [class]="tone()"><div class="stat-icon"><span class="material-symbols-outlined">{{icon()}}</span></div><div><span>{{label()}}</span><strong>{{value()}}</strong><small>{{trend()}}</small></div></article>`}) export class StatCardComponent{label=input.required<string>();value=input.required<string|number>();icon=input('analytics');trend=input('');tone=input('primary');}

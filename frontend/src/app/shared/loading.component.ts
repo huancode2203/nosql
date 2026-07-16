@@ -1,0 +1,1 @@
+import { Component } from '@angular/core'; @Component({selector:'app-loading',standalone:true,template:`<div class="skeleton-grid">@for(i of [1,2,3,4];track i){<div class="skeleton card"></div>}</div>`}) export class LoadingComponent{}

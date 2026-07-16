@@ -1,0 +1,12 @@
+<div class="app-shell" [class.sidebar-collapsed]="collapsed()">
+  <aside class="sidebar" [class.mobile-open]="mobileOpen()">
+    <div class="brand"><div class="brand-mark">E</div><div class="brand-copy"><strong>EduManage</strong><span>Learning Management</span></div></div>
+    <nav>@for(item of nav();track item.route){<a [routerLink]="item.route" routerLinkActive="active" (click)="mobileOpen.set(false)"><span class="material-symbols-outlined">{{item.icon}}</span><span>{{item.label}}</span></a>}</nav>
+    <div class="sidebar-footer"><a routerLink="/profile"><span class="material-symbols-outlined">manage_accounts</span><span>Hồ sơ cá nhân</span></a><button (click)="logout()"><span class="material-symbols-outlined">logout</span><span>Đăng xuất</span></button></div>
+  </aside>
+  <div class="mobile-backdrop" [class.show]="mobileOpen()" (click)="mobileOpen.set(false)"></div>
+  <section class="workspace">
+    <header class="topbar"><div><button class="icon-button mobile-only" (click)="mobileOpen.set(true)"><span class="material-symbols-outlined">menu</span></button><button class="icon-button desktop-only" (click)="collapsed.set(!collapsed())"><span class="material-symbols-outlined">dock_to_right</span></button></div><div class="top-actions"><a class="icon-button" routerLink="/notifications"><span class="material-symbols-outlined">notifications</span><i></i></a><a class="user-chip" routerLink="/profile"><div class="avatar">{{user()?.fullName?.charAt(0) || 'U'}}</div><div><strong>{{user()?.fullName}}</strong><span>{{user()?.role}}</span></div></a></div></header>
+    <main class="content"><router-outlet /></main>
+  </section><app-toast-container />
+</div>
