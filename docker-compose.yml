@@ -30,7 +30,9 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE:-EduManageLms.Client}
       Backup__Directory: /app/backups
     ports: ["8080:8080"]
-    volumes: ["backup_data:/app/backups"]
+    volumes:
+      - backup_data:/app/backups
+      - upload_data:/app/uploads
     depends_on:
       mongo: { condition: service_healthy }
     healthcheck:
@@ -48,3 +50,4 @@ services:
 volumes:
   mongo_data:
   backup_data:
+  upload_data:

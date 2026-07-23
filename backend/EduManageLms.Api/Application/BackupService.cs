@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using EduManageLms.Api.Common;
 using EduManageLms.Api.Domain;
 using EduManageLms.Api.Infrastructure;
@@ -7,196 +8,170 @@ using MongoDB.Driver;
 
 namespace EduManageLms.Api.Application;
 
-public sealed class BackupService(
-    MongoContext db,
-    IOptions<BackupOptions> options) : IBackupService
+public sealed class BackupService(MongoContext db, IOptions<BackupOptions> options) : IBackupService
 {
-    private readonly BackupOptions backupOptions = options.Value;
+    private readonly BackupOptions settings = options.Value;
 
-    public async Task<Dictionary<string, object>> CreateAsync(
-        string userId,
-        CancellationToken cancellationToken)
+    public async Task<Dictionary<string, object>> CreateAsync(string userId, CancellationToken ct)
     {
-        Directory.CreateDirectory(backupOptions.Directory);
-
-        var backupName = $"EduManageLms_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-        var backupPath = Path.Combine(backupOptions.Directory, backupName);
-
-        var history = new BackupHistory
-        {
-            FileName = backupName,
-            PerformedBy = userId,
-            Status = "Pending"
-        };
-
-        await db.BackupHistories.InsertOneAsync(
-            history,
-            cancellationToken: cancellationToken);
+        Directory.CreateDirectory(settings.Directory);
+        var name = $"EduManageLms_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var path = Path.Combine(settings.Directory, name);
+        var history = new BackupHistory { FileName = name, PerformedBy = userId };
+        await db.BackupHistories.InsertOneAsync(history, cancellationToken: ct);
 
         try
         {
-            await RunProcessAsync(
-                backupOptions.MongoDumpPath,
-                [
-                    $"--uri={db.Options.ConnectionString}",
-                    $"--db={db.Options.DatabaseName}",
-                    $"--out={backupPath}"
-                ],
-                cancellationToken);
-
+            var arguments = $"--uri=\"{db.Options.ConnectionString}\" --db=\"{db.Options.DatabaseName}\" --out=\"{path}\"";
+            await RunAsync(settings.MongoDumpPath, arguments, ct);
             history.Status = "Success";
             history.CompletedAt = DateTime.UtcNow;
-            history.SizeBytes = Directory.Exists(backupPath)
-                ? Directory.EnumerateFiles(backupPath, "*", SearchOption.AllDirectories)
-                    .Sum(file => new FileInfo(file).Length)
+            history.SizeBytes = Directory.Exists(path)
+                ? Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length)
                 : 0;
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
             history.Status = "Failed";
-            history.Error = exception.Message;
-            history.CompletedAt = DateTime.UtcNow;
+            history.Error = ex.Message;
         }
 
         history.UpdatedAt = DateTime.UtcNow;
-
-        await db.BackupHistories.ReplaceOneAsync(
-            item => item.Id == history.Id,
-            history,
-            cancellationToken: cancellationToken);
-
-        if (history.Status == "Failed")
-        {
-            throw new AppException($"Backup tháº¥t báº¡i: {history.Error}", 500);
-        }
-
-        return new Dictionary<string, object>
-        {
-            ["id"] = history.Id,
-            ["fileName"] = history.FileName,
-            ["sizeBytes"] = history.SizeBytes,
-            ["status"] = history.Status
-        };
+        await db.BackupHistories.ReplaceOneAsync(x => x.Id == history.Id, history, cancellationToken: ct);
+        if (history.Status == "Failed") throw new AppException("Backup thất bại: " + history.Error, 500);
+        return Map(history).ToDictionary(x => x.Key, x => x.Value!);
     }
 
-    public async Task<IReadOnlyCollection<Dictionary<string, object?>>> ListAsync(
-        CancellationToken cancellationToken)
-    {
-        var histories = await db.BackupHistories
-            .Find(FilterDefinition<BackupHistory>.Empty)
-            .SortByDescending(item => item.CreatedAt)
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyCollection<Dictionary<string, object?>>> ListAsync(CancellationToken ct) =>
+        (await db.BackupHistories.Find(x => !x.IsDeleted).SortByDescending(x => x.CreatedAt).ToListAsync(ct))
+        .Select(Map)
+        .ToList();
 
-        return histories
-            .Select(item => new Dictionary<string, object?>
+    public async Task<(byte[] Content, string FileName)> DownloadAsync(string id, CancellationToken ct)
+    {
+        var item = await RequireBackupAsync(id, ct);
+        var source = Path.Combine(settings.Directory, item.FileName);
+        if (!Directory.Exists(source)) throw new NotFoundException("Không tìm thấy thư mục bản sao lưu");
+        var temp = Path.Combine(Path.GetTempPath(), $"{item.FileName}-{Guid.NewGuid():N}.zip");
+        try
+        {
+            ZipFile.CreateFromDirectory(source, temp, CompressionLevel.Fastest, false);
+            return (await File.ReadAllBytesAsync(temp, ct), item.FileName + ".zip");
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+    }
+
+    public async Task<Dictionary<string, object>> UploadAsync(Microsoft.AspNetCore.Http.IFormFile file, string userId, CancellationToken ct)
+    {
+        if (file.Length == 0) throw new AppException("File sao lưu rỗng");
+        if (file.Length > 500L * 1024 * 1024) throw new AppException("File sao lưu vượt quá 500 MB");
+        if (!string.Equals(Path.GetExtension(file.FileName), ".zip", StringComparison.OrdinalIgnoreCase)) throw new AppException("Chỉ chấp nhận file ZIP");
+
+        Directory.CreateDirectory(settings.Directory);
+        var name = $"Imported_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}";
+        var destination = Path.GetFullPath(Path.Combine(settings.Directory, name));
+        Directory.CreateDirectory(destination);
+        await using var input = file.OpenReadStream();
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, false);
+        foreach (var entry in archive.Entries)
+        {
+            var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
+            if (!target.StartsWith(destination + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new AppException("File ZIP không an toàn");
+            if (string.IsNullOrEmpty(entry.Name))
             {
-                ["id"] = item.Id,
-                ["fileName"] = item.FileName,
-                ["sizeBytes"] = item.SizeBytes,
-                ["status"] = item.Status,
-                ["performedBy"] = item.PerformedBy,
-                ["createdAt"] = item.CreatedAt,
-                ["completedAt"] = item.CompletedAt,
-                ["error"] = item.Error
-            })
-            .ToList();
-    }
-
-    public async Task RestoreAsync(
-        string id,
-        string userId,
-        string confirmation,
-        CancellationToken cancellationToken)
-    {
-        if (!string.Equals(confirmation, "RESTORE", StringComparison.Ordinal))
-        {
-            throw new AppException("Chuá»—i xÃ¡c nháº­n khÃ´ng há»£p lá»‡");
+                Directory.CreateDirectory(target);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await using var entryStream = entry.Open();
+            await using var output = File.Create(target);
+            await entryStream.CopyToAsync(output, ct);
         }
 
-        var backup = await db.BackupHistories
-            .Find(item => item.Id == id && item.Status == "Success")
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("KhÃ´ng tÃ¬m tháº¥y báº£n sao lÆ°u há»£p lá»‡");
-
-        // Táº¡o báº£n sao lÆ°u an toÃ n trÆ°á»›c khi phá»¥c há»“i dá»¯ liá»‡u cÅ©.
-        await CreateAsync(userId, cancellationToken);
-
-        var databaseBackupPath = Path.Combine(
-            backupOptions.Directory,
-            backup.FileName,
-            db.Options.DatabaseName);
-
-        if (!Directory.Exists(databaseBackupPath))
+        var history = new BackupHistory
         {
-            throw new NotFoundException("ThÆ° má»¥c dá»¯ liá»‡u cá»§a báº£n sao lÆ°u khÃ´ng tá»“n táº¡i");
-        }
-
-        await RunProcessAsync(
-            backupOptions.MongoRestorePath,
-            [
-                $"--uri={db.Options.ConnectionString}",
-                $"--db={db.Options.DatabaseName}",
-                "--drop",
-                databaseBackupPath
-            ],
-            cancellationToken);
-
-        await db.AuditLogs.InsertOneAsync(
-            new AuditLog
-            {
-                UserId = userId,
-                Role = "Admin",
-                Action = "Restore",
-                Entity = "Database",
-                EntityId = id,
-                Result = "Success",
-                Note = $"Phá»¥c há»“i tá»« báº£n sao lÆ°u {backup.FileName}"
-            },
-            cancellationToken: cancellationToken);
-    }
-
-    private static async Task RunProcessAsync(
-        string executable,
-        IEnumerable<string> arguments,
-        CancellationToken cancellationToken)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = executable,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
+            FileName = name,
+            PerformedBy = userId,
+            Type = "Uploaded",
+            Status = "Success",
+            CompletedAt = DateTime.UtcNow,
+            SizeBytes = Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length)
         };
+        await db.BackupHistories.InsertOneAsync(history, cancellationToken: ct);
+        return Map(history).ToDictionary(x => x.Key, x => x.Value!);
+    }
 
-        foreach (var argument in arguments)
+    public async Task DeleteAsync(string id, string userId, CancellationToken ct)
+    {
+        var item = await RequireBackupAsync(id, ct);
+        var path = Path.Combine(settings.Directory, item.FileName);
+        if (Directory.Exists(path)) Directory.Delete(path, true);
+        item.IsDeleted = true;
+        item.UpdatedAt = DateTime.UtcNow;
+        await db.BackupHistories.ReplaceOneAsync(x => x.Id == item.Id, item, cancellationToken: ct);
+        await WriteAuditAsync(userId, "DeleteBackup", id, ct);
+    }
+
+    public async Task RestoreAsync(string id, string userId, string confirmation, CancellationToken ct)
+    {
+        if (!string.Equals(confirmation, "RESTORE", StringComparison.Ordinal)) throw new AppException("Chuỗi xác nhận không hợp lệ");
+        var item = await RequireBackupAsync(id, ct);
+        await CreateAsync(userId, ct);
+        var root = Path.Combine(settings.Directory, item.FileName);
+        var databasePath = Path.Combine(root, db.Options.DatabaseName);
+        if (!Directory.Exists(databasePath))
         {
-            startInfo.ArgumentList.Add(argument);
+            databasePath = Directory.EnumerateDirectories(root, db.Options.DatabaseName, SearchOption.AllDirectories).FirstOrDefault()
+                           ?? throw new NotFoundException("Không tìm thấy dữ liệu MongoDB trong bản sao lưu");
         }
+        var arguments = $"--uri=\"{db.Options.ConnectionString}\" --db=\"{db.Options.DatabaseName}\" --drop \"{databasePath}\"";
+        await RunAsync(settings.MongoRestorePath, arguments, ct);
+        await WriteAuditAsync(userId, "Restore", id, ct);
+    }
 
-        using var process = new Process { StartInfo = startInfo };
+    private async Task<BackupHistory> RequireBackupAsync(string id, CancellationToken ct) =>
+        await db.BackupHistories.Find(x => x.Id == id && x.Status == "Success" && !x.IsDeleted).FirstOrDefaultAsync(ct)
+        ?? throw new NotFoundException("Không tìm thấy bản sao lưu");
 
-        if (!process.Start())
+    private async Task WriteAuditAsync(string userId, string action, string id, CancellationToken ct) =>
+        await db.AuditLogs.InsertOneAsync(new AuditLog { UserId = userId, Role = "Admin", Action = action, Entity = "Database", EntityId = id }, cancellationToken: ct);
+
+    private static Dictionary<string, object?> Map(BackupHistory item) => new()
+    {
+        ["id"] = item.Id,
+        ["fileName"] = item.FileName,
+        ["sizeBytes"] = item.SizeBytes,
+        ["status"] = item.Status,
+        ["type"] = item.Type,
+        ["performedBy"] = item.PerformedBy,
+        ["createdAt"] = item.CreatedAt,
+        ["completedAt"] = item.CompletedAt,
+        ["error"] = item.Error
+    };
+
+    private static async Task RunAsync(string fileName, string arguments, CancellationToken ct)
+    {
+        using var process = new Process
         {
-            throw new InvalidOperationException($"KhÃ´ng thá»ƒ khá»Ÿi Ä‘á»™ng tiáº¿n trÃ¬nh {executable}");
-        }
-
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        var standardOutput = await standardOutputTask;
-        var standardError = await standardErrorTask;
-
-        if (process.ExitCode != 0)
-        {
-            var detail = string.IsNullOrWhiteSpace(standardError)
-                ? standardOutput
-                : standardError;
-
-            throw new InvalidOperationException(
-                $"Tiáº¿n trÃ¬nh {executable} tháº¥t báº¡i vá»›i mÃ£ {process.ExitCode}: {detail}");
-        }
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        process.Start();
+        var errorTask = process.StandardError.ReadToEndAsync(ct);
+        var outputTask = process.StandardOutput.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+        var error = await errorTask;
+        var output = await outputTask;
+        if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output : error);
     }
 }

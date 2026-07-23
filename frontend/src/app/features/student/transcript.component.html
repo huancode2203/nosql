@@ -1,0 +1,84 @@
+<app-page-header title="Kết quả học tập" subtitle="Bảng điểm toàn khóa, điểm thành phần, GPA và chuẩn đầu ra.">
+  <div class="button-group">
+    <button class="secondary-button" type="button" (click)="print()"><span class="material-symbols-outlined">print</span> In bảng điểm</button>
+    <button class="primary-button" type="button" (click)="exportData()"><span class="material-symbols-outlined">download</span> Xuất Excel</button>
+  </div>
+</app-page-header>
+
+<section class="outcome-summary panel">
+  <div class="outcome-heading"><span class="material-symbols-outlined">workspace_premium</span><div><span class="eyebrow">CHUẨN ĐẦU RA</span><h3>Tổng hợp mức độ đạt CLO</h3></div></div>
+  <div class="outcome-cards">
+    <div><span>Tổng CLO</span><strong>{{ cloSummary().total }}</strong></div>
+    <div class="success"><span>Đã đạt</span><strong>{{ cloSummary().passed }}</strong></div>
+    <div class="danger"><span>Chưa đạt</span><strong>{{ cloSummary().failed }}</strong></div>
+    <div class="primary"><span>Tỷ lệ hoàn thành</span><strong>{{ cloSummary().percentage }}%</strong></div>
+  </div>
+</section>
+
+<section class="academic-filter-bar panel">
+  <label>Tìm môn học
+    <div class="filter-input"><span class="material-symbols-outlined">search</span><input type="search" placeholder="Mã môn, tên môn, lớp học phần..." [value]="search()" (input)="search.set($any($event.target).value)" /></div>
+  </label>
+  <label>Năm học
+    <select [value]="selectedYear()" (change)="setYear($any($event.target).value)">
+      <option value="all">Tất cả năm học</option>
+      @for (year of years(); track year) { <option [value]="year">{{ year }}</option> }
+    </select>
+  </label>
+  <label>Học kỳ
+    <select [value]="selectedSemester()" (change)="selectedSemester.set($any($event.target).value)">
+      <option value="all">Tất cả học kỳ</option>
+      @for (semester of semesters(); track semester.code) { <option [value]="semester.code">{{ semester.name }}</option> }
+    </select>
+  </label>
+  <label>Kết quả
+    <select [value]="resultFilter()" (change)="resultFilter.set($any($event.target).value)">
+      <option value="all">Tất cả</option><option value="passed">Đạt</option><option value="failed">Chưa đạt</option>
+    </select>
+  </label>
+</section>
+
+@if (loading()) {
+  <article class="panel empty-state"><span class="material-symbols-outlined spin">progress_activity</span><h3>Đang tải bảng điểm...</h3></article>
+} @else {
+  <article class="academic-results panel">
+    <div class="result-table-wrap">
+      <table class="result-table">
+        <thead>
+          <tr class="group-header">
+            <th rowspan="2">STT</th><th rowspan="2">Mã môn học</th><th rowspan="2" class="course-name-column">Tên môn học / học phần</th><th rowspan="2">Lớp học phần</th><th rowspan="2">Số tín chỉ</th>
+            @if (componentColumns().length) { <th [attr.colspan]="componentColumns().length">Điểm thành phần</th> }
+            <th rowspan="2" class="final-score-column">Điểm tổng kết</th><th rowspan="2">Thang điểm 4</th><th rowspan="2">Điểm chữ</th><th rowspan="2">Xếp loại</th><th rowspan="2">Đạt</th><th rowspan="2">Đạt CLO</th><th rowspan="2">Ghi chú</th>
+          </tr>
+          <tr>
+            @for (component of componentColumns(); track component.id) { <th class="score-column">{{ component.name }}</th> }
+          </tr>
+        </thead>
+        <tbody>
+          @for (term of filteredTerms(); track term.academicYear + term.semesterCode) {
+            <tr class="term-row"><td [attr.colspan]="totalColumns()"><strong>{{ term.semesterName }} ({{ term.academicYear }})</strong><span>GPA: {{ term.gpa }} · TB10: {{ term.average10 }} · {{ term.passedCredits }}/{{ term.totalCredits }} tín chỉ đạt</span></td></tr>
+            @for (course of term.courses; track course.classSectionCode; let index = $index) {
+              <tr [class.failed-row]="!course.passed">
+                <td>{{ index + 1 }}</td>
+                <td><strong class="course-code-text">{{ course.courseCode }}</strong></td>
+                <td class="course-name-cell"><strong>{{ course.courseName }}</strong><small>{{ course.lecturerName }}</small></td>
+                <td>{{ course.classSectionCode }}</td><td>{{ course.credits }}</td>
+                @for (component of componentColumns(); track component.id) { <td class="score-cell" [title]="componentTitle(course, component.id)">{{ scoreFor(course, component.id) }}</td> }
+                <td class="final-score final-score-column" [class.danger-text]="!course.passed">{{ course.finalScore.toFixed(2) }}</td>
+                <td>{{ course.gradePoint.toFixed(2) }}</td>
+                <td><span class="letter-grade" [class.failed]="course.letterGrade === 'F'">{{ course.letterGrade }}</span></td>
+                <td>{{ course.classification }}</td>
+                <td><span class="result-icon material-symbols-outlined" [class.success-text]="course.passed" [class.danger-text]="!course.passed">{{ course.passed ? 'check_circle' : 'cancel' }}</span></td>
+                <td><span class="status-chip" [class.success]="cloFor(course.courseCode) === 'Đạt'">{{ cloFor(course.courseCode) }}</span></td>
+                <td>{{ course.publishedAt ? ('Công bố ' + (course.publishedAt | date:'dd/MM/yyyy')) : '—' }}</td>
+              </tr>
+            }
+            <tr class="term-summary-row"><td [attr.colspan]="totalColumns()"><span>Điểm trung bình học kỳ hệ 10: <strong>{{ term.average10 }}</strong></span><span>Điểm trung bình học kỳ hệ 4: <strong>{{ term.gpa }}</strong></span><span>Tổng tín chỉ: <strong>{{ term.totalCredits }}</strong></span><span>Tín chỉ đạt: <strong>{{ term.passedCredits }}</strong></span></td></tr>
+          } @empty {
+            <tr><td [attr.colspan]="totalColumns()" class="empty">Không có dữ liệu phù hợp với bộ lọc.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </article>
+}

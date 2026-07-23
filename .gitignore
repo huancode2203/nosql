@@ -10,3 +10,7 @@ logs/
 .DS_Store
 Fix-*.ps1
 *-build.log
+patch-backup-*/
+*.user
+*.suo
+*.bak-*

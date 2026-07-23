@@ -1,2 +1,31 @@
-<app-page-header [title]="title()" [subtitle]="subtitle()"><button class="primary-button" (click)="open()"><span class="material-symbols-outlined">add</span> Thêm mới</button></app-page-header><article class="panel table-panel"><div class="table-toolbar"><div class="search-box"><span class="material-symbols-outlined">search</span><input [(ngModel)]="search" (keyup.enter)="load()" placeholder="Tìm kiếm..."/><button (click)="load()">Tìm</button></div><div><button class="secondary-button"><span class="material-symbols-outlined">upload_file</span> Import</button><button class="secondary-button"><span class="material-symbols-outlined">download</span> Export</button></div></div><div class="table-wrap"><table><thead><tr>@for(c of columns();track c){<th>{{c}}</th>}<th>Thao tác</th></tr></thead><tbody>@if(loading()){<tr><td [attr.colspan]="columns().length+1">Đang tải dữ liệu...</td></tr>}@else{@for(item of items();track item['id']){<tr>@for(c of columns();track c){<td>{{display(item[c])}}</td>}<td><button class="icon-button" (click)="open(item)"><span class="material-symbols-outlined">edit</span></button><button class="icon-button danger" (click)="remove(item)"><span class="material-symbols-outlined">delete</span></button></td></tr>}@empty{<tr><td [attr.colspan]="columns().length+1" class="empty">Không có dữ liệu phù hợp</td></tr>}}</tbody></table></div><footer class="table-footer"><span>Tổng cộng {{total}} bản ghi</span><div><button [disabled]="page===1" (click)="page=page-1;load()">Trước</button><b>Trang {{page}}</b><button [disabled]="items().length<20" (click)="page=page+1;load()">Sau</button></div></footer></article>
-@if(modal()){<div class="modal-backdrop" (click)="modal.set(false)"><form class="modal" (click)="$event.stopPropagation()" (submit)="$event.preventDefault();save()"><div class="modal-heading"><div><h3>{{editing()['id']?'Cập nhật':'Thêm mới'}} {{title()}}</h3><p>Nhập các trường dữ liệu cần thiết.</p></div><button type="button" class="icon-button" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button></div><div class="form-grid">@for(c of columns();track c){@if(c!=='id'&&c!=='status'){<label>{{c}}<input [ngModel]="editing()[c]" (ngModelChange)="updateField(c,$event)" [ngModelOptions]="{standalone:true}"/></label>}}</div><div class="modal-actions"><button type="button" class="secondary-button" (click)="modal.set(false)">Hủy</button><button class="primary-button">Lưu dữ liệu</button></div></form></div>}
+<app-page-header [title]="title()" [subtitle]="subtitle()">
+  <button class="primary-button" (click)="open()"><span class="material-symbols-outlined">add</span> Thêm mới</button>
+</app-page-header>
+<article class="panel table-panel">
+  <div class="table-toolbar">
+    <div class="search-box"><span class="material-symbols-outlined">search</span><input [(ngModel)]="search" (keyup.enter)="load()" placeholder="Tìm kiếm..."/><button (click)="load()">Tìm</button></div>
+    <div>
+      @if(resource()==='students'){
+        <label class="secondary-button file-button"><span class="material-symbols-outlined">upload_file</span> Import Excel<input type="file" accept=".xlsx" (change)="chooseImport($any($event.target).files)"/></label>
+      }
+      <button class="secondary-button" (click)="exportData()"><span class="material-symbols-outlined">download</span> Export Excel</button>
+    </div>
+  </div>
+  <div class="table-wrap"><table><thead><tr>@for(column of columns();track column){<th>{{column}}</th>}<th>Thao tác</th></tr></thead><tbody>
+    @if(loading()){<tr><td [attr.colspan]="columns().length+1">Đang tải dữ liệu...</td></tr>}
+    @else{@for(item of items();track item['id']){<tr>@for(column of columns();track column){<td>{{display(item[column])}}</td>}<td><button class="icon-button" (click)="open(item)"><span class="material-symbols-outlined">edit</span></button><button class="icon-button danger" (click)="remove(item)"><span class="material-symbols-outlined">delete</span></button></td></tr>}@empty{<tr><td [attr.colspan]="columns().length+1" class="empty">Không có dữ liệu phù hợp</td></tr>}}
+  </tbody></table></div>
+  <footer class="table-footer"><span>Tổng cộng {{total}} bản ghi</span><div><button [disabled]="page===1" (click)="page=page-1;load()">Trước</button><b>Trang {{page}}</b><button [disabled]="items().length<20" (click)="page=page+1;load()">Sau</button></div></footer>
+</article>
+@if(modal()){
+  <div class="modal-backdrop" (click)="modal.set(false)"><form class="modal" (click)="$event.stopPropagation()" (submit)="$event.preventDefault();save()"><div class="modal-heading"><div><h3>{{editing()['id']?'Cập nhật':'Thêm mới'}} {{title()}}</h3><p>Nhập các trường dữ liệu cần thiết.</p></div><button type="button" class="icon-button" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button></div>
+    <div class="form-grid">@for(column of columns();track column){@if(column!=='id'){<label>{{column}}<input [type]="fieldType(column)" [ngModel]="editing()[column]" (ngModelChange)="updateField(column,$event)" [ngModelOptions]="{standalone:true}"/></label>}}</div>
+    <div class="modal-actions"><button type="button" class="secondary-button" (click)="modal.set(false)">Hủy</button><button class="primary-button">Lưu dữ liệu</button></div>
+  </form></div>
+}
+@if(importModal()){
+  <div class="modal-backdrop" (click)="importModal.set(false)"><section class="modal wide-modal" (click)="$event.stopPropagation()"><div class="modal-heading"><div><h3>Xem trước import sinh viên</h3><p>{{importFile?.name}}</p></div><button class="icon-button" (click)="importModal.set(false)"><span class="material-symbols-outlined">close</span></button></div>
+    @if(importing()){<div class="empty">Đang đọc và kiểm tra file...</div>}
+    @if(preview();as data){<div class="result-summary"><div><b>{{data.totalRows}}</b><span>Tổng dòng</span></div><div><b class="success-text">{{data.validRows}}</b><span>Hợp lệ</span></div><div><b class="danger-text">{{data.invalidRows}}</b><span>Có lỗi</span></div></div><div class="table-wrap compact-table"><table><thead><tr><th>Dòng</th><th>Mã SV</th><th>Họ tên</th><th>Kết quả</th></tr></thead><tbody>@for(row of data.rows;track row.rowNumber){<tr><td>{{row.rowNumber}}</td><td>{{row.data['studentCode']}}</td><td>{{row.data['fullName']}}</td><td><span class="badge" [class.success]="row.valid" [class.danger]="!row.valid">{{row.valid?'Hợp lệ':row.errors.join('; ')}}</span></td></tr>}</tbody></table></div><div class="modal-actions"><button class="secondary-button" (click)="importModal.set(false)">Đóng</button><button class="primary-button" [disabled]="data.invalidRows>0||importing()" (click)="previewImport(true)">Xác nhận import</button></div>}
+  </section></div>
+}

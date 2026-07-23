@@ -1,0 +1,11 @@
+import { Component, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../core/services/api.service';
+import { MaterialItem } from '../../core/models/portal.models';
+import { PageHeaderComponent } from '../../shared/page-header.component';
+
+@Component({ standalone: true, imports: [DatePipe, FormsModule, PageHeaderComponent], template: `
+<app-page-header title="Tài liệu học tập" subtitle="Tài liệu được giảng viên công bố cho các lớp học phần của bạn."></app-page-header><div class="filter-bar"><label>Tìm kiếm<input [(ngModel)]="search" placeholder="Tên tài liệu hoặc môn học"/></label><label>Danh mục<select [(ngModel)]="category"><option value="">Tất cả</option>@for(item of categories();track item){<option [value]="item">{{item}}</option>}</select></label></div><div class="course-grade-grid">@for(item of filtered();track item.id){<article class="panel"><div class="panel-heading"><div><span class="eyebrow">{{item.courseCode}} · {{item.chapter}}</span><h3>{{item.title}}</h3><p>{{item.description}}</p></div><span class="material-symbols-outlined resource-icon">{{item.resourceType==='Link'?'link':'picture_as_pdf'}}</span></div><div class="detail-list"><div><span>Danh mục</span><b>{{item.category}}</b></div><div><span>Ngày đăng</span><b>{{item.visibleFrom|date:'dd/MM/yyyy'}}</b></div></div><a class="primary-button full" [href]="item.resourceUrl" target="_blank">Xem / tải tài liệu</a></article>}@empty{<article class="panel empty-state"><span class="material-symbols-outlined">folder_open</span><h3>Không có tài liệu phù hợp</h3></article>}</div>
+` })
+export class StudentMaterialsComponent implements OnInit { items = signal<MaterialItem[]>([]); search = ''; category = ''; constructor(private api: ApiService) {} ngOnInit() { this.api.get<MaterialItem[]>('/student/materials').subscribe(response => this.items.set(response.data)); } categories() { return [...new Set(this.items().map(x => x.category))]; } filtered() { const term = this.search.toLowerCase(); return this.items().filter(x => (!term || x.title.toLowerCase().includes(term) || x.courseName.toLowerCase().includes(term)) && (!this.category || x.category === this.category)); } }

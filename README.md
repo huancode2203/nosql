@@ -84,3 +84,7 @@ mongosh "mongodb://localhost:27017/EduManageLms" database/05-explain.js
 ## Ghi chú nghiệm thu
 
 Frontend đã được build production thành công trong môi trường tạo project. Môi trường hiện tại không có .NET SDK và Docker daemon nên backend chưa thể được biên dịch/chạy tại đây; Dockerfile, project file và mã nguồn đã được chuẩn bị để chạy trên máy có .NET 8 hoặc bằng Docker. Xem `docs/DEMO_SCENARIOS.md` để demo theo thứ tự.
+
+## Ban va chuc nang theo vai tro
+
+Xem [PATCH_ROLE_FEATURES.md](PATCH_ROLE_FEATURES.md) de biet cac workflow Admin, Lecturer va Student duoc bo sung.

@@ -1,1 +1,74 @@
-<div class="auth-page"><section class="auth-visual"><div class="visual-content"><span class="eyebrow">HỆ THỐNG QUẢN LÝ HỌC TẬP</span><h1>Dữ liệu học tập minh bạch.<br/>Quyết định giáo dục chính xác.</h1><p>Quản lý điểm, GPA, chuẩn đầu ra CLO và hoạt động học tập trên một nền tảng thống nhất.</p><div class="visual-stats"><div><b>80+</b><span>Sinh viên mẫu</span></div><div><b>15</b><span>Môn học</span></div><div><b>3</b><span>Vai trò</span></div></div></div></section><section class="auth-panel"><form class="login-card" [formGroup]="form" (ngSubmit)="submit()"><div class="login-brand"><div class="brand-mark">E</div><div><b>EduManage LMS</b><span>Cổng thông tin đào tạo</span></div></div><div><h2>Chào mừng trở lại</h2><p>Đăng nhập để tiếp tục vào hệ thống.</p></div>@if(error()){<div class="alert error">{{error()}}</div>}<label>Email hoặc tên đăng nhập<input formControlName="identifier" autocomplete="username"/></label><label>Mật khẩu<div class="password-field"><input [type]="show()?'text':'password'" formControlName="password" autocomplete="current-password"/><button type="button" (click)="show.set(!show())"><span class="material-symbols-outlined">{{show()?'visibility_off':'visibility'}}</span></button></div></label><div class="form-row"><label class="checkbox"><input type="checkbox" formControlName="rememberMe"/> Ghi nhớ đăng nhập</label><a routerLink="/forgot-password">Quên mật khẩu?</a></div><button class="primary-button full" [disabled]="loading()||form.invalid">{{loading()?'Đang đăng nhập...':'Đăng nhập'}}</button><div class="demo-box"><strong>Tài khoản demo</strong><button type="button" (click)="form.patchValue({identifier:'admin@lms.edu.vn'})">Admin</button><button type="button" (click)="form.patchValue({identifier:'gv001@lms.edu.vn'})">Giảng viên</button><button type="button" (click)="form.patchValue({identifier:'sv001@lms.edu.vn'})">Sinh viên</button><span>Mật khẩu: Lms&#64;123456</span></div></form></section></div>
+<div class="auth-page">
+  <section class="auth-visual" aria-label="Giới thiệu hệ thống">
+    <div class="visual-content">
+      <span class="eyebrow">HỆ THỐNG QUẢN LÝ HỌC TẬP</span>
+      <h1>Dữ liệu học tập minh bạch.<br />Quyết định giáo dục chính xác.</h1>
+      <p>Quản lý điểm, GPA, chuẩn đầu ra CLO và hoạt động học tập trên một nền tảng thống nhất.</p>
+      <div class="visual-stats">
+        <div><b>120+</b><span>Sinh viên mẫu</span></div>
+        <div><b>100+</b><span>Học phần</span></div>
+        <div><b>3</b><span>Vai trò</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="auth-panel">
+    <form class="login-card" [formGroup]="form" (ngSubmit)="submit()">
+      <div class="login-card-header">
+        <div class="login-brand">
+          <div class="brand-mark">E</div>
+          <div><b>EduManage LMS</b><span>Cổng thông tin đào tạo</span></div>
+        </div>
+        <div class="login-heading">
+          <span class="eyebrow">ĐĂNG NHẬP HỆ THỐNG</span>
+          <h2>Chào mừng trở lại</h2>
+          <p>Nhập thông tin tài khoản để tiếp tục.</p>
+        </div>
+      </div>
+
+      @if (error()) {
+        <div class="alert error" role="alert">{{ error() }}</div>
+      }
+
+      <div class="login-fields">
+        <label>
+          <span>Email hoặc tên đăng nhập</span>
+          <div class="login-input-shell">
+            <span class="material-symbols-outlined">person</span>
+            <input formControlName="identifier" autocomplete="username" placeholder="Nhập email hoặc tên đăng nhập" />
+          </div>
+        </label>
+
+        <label>
+          <span>Mật khẩu</span>
+          <div class="password-field login-input-shell">
+            <span class="material-symbols-outlined">lock</span>
+            <input [type]="show() ? 'text' : 'password'" formControlName="password" autocomplete="current-password" placeholder="Nhập mật khẩu" />
+            <button type="button" (click)="show.set(!show())" [attr.aria-label]="show() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
+              <span class="material-symbols-outlined">{{ show() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-row login-options">
+        <label class="checkbox"><input type="checkbox" formControlName="rememberMe" /> Ghi nhớ đăng nhập</label>
+        <a routerLink="/forgot-password">Quên mật khẩu?</a>
+      </div>
+
+      <button class="primary-button full login-submit" [disabled]="loading() || form.invalid">
+        <span>{{ loading() ? 'Đang đăng nhập...' : 'Đăng nhập' }}</span>
+        @if (!loading()) { <span class="material-symbols-outlined">arrow_forward</span> }
+      </button>
+
+      <div class="demo-box">
+        <div class="demo-heading"><strong>Tài khoản demo</strong><span>Mật khẩu chung: Lms&#64;123456</span></div>
+        <div class="demo-actions">
+          <button type="button" (click)="form.patchValue({ identifier: 'admin@lms.edu.vn' })"><span class="material-symbols-outlined">admin_panel_settings</span>Admin</button>
+          <button type="button" (click)="form.patchValue({ identifier: 'gv001@lms.edu.vn' })"><span class="material-symbols-outlined">co_present</span>Giảng viên</button>
+          <button type="button" (click)="form.patchValue({ identifier: '2001230282' })"><span class="material-symbols-outlined">school</span>Sinh viên</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>

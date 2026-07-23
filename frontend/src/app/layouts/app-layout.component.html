@@ -1,12 +1,112 @@
-<div class="app-shell" [class.sidebar-collapsed]="collapsed()">
-  <aside class="sidebar" [class.mobile-open]="mobileOpen()">
-    <div class="brand"><div class="brand-mark">E</div><div class="brand-copy"><strong>EduManage</strong><span>Learning Management</span></div></div>
-    <nav>@for(item of nav();track item.route){<a [routerLink]="item.route" routerLinkActive="active" (click)="mobileOpen.set(false)"><span class="material-symbols-outlined">{{item.icon}}</span><span>{{item.label}}</span></a>}</nav>
-    <div class="sidebar-footer"><a routerLink="/profile"><span class="material-symbols-outlined">manage_accounts</span><span>Hồ sơ cá nhân</span></a><button (click)="logout()"><span class="material-symbols-outlined">logout</span><span>Đăng xuất</span></button></div>
-  </aside>
-  <div class="mobile-backdrop" [class.show]="mobileOpen()" (click)="mobileOpen.set(false)"></div>
-  <section class="workspace">
-    <header class="topbar"><div><button class="icon-button mobile-only" (click)="mobileOpen.set(true)"><span class="material-symbols-outlined">menu</span></button><button class="icon-button desktop-only" (click)="collapsed.set(!collapsed())"><span class="material-symbols-outlined">dock_to_right</span></button></div><div class="top-actions"><a class="icon-button" routerLink="/notifications"><span class="material-symbols-outlined">notifications</span><i></i></a><a class="user-chip" routerLink="/profile"><div class="avatar">{{user()?.fullName?.charAt(0) || 'U'}}</div><div><strong>{{user()?.fullName}}</strong><span>{{user()?.role}}</span></div></a></div></header>
-    <main class="content"><router-outlet /></main>
-  </section><app-toast-container />
+<div class="portal-shell">
+  <header class="portal-header">
+    <div class="header-inner">
+      <a class="portal-brand" [routerLink]="homeRoute()" aria-label="Về trang tổng quan">
+        <span class="brand-emblem">E</span>
+        <span class="brand-text"><strong>EduManage LMS</strong><small>Cổng thông tin đào tạo</small></span>
+      </a>
+
+      <form class="global-search" (submit)="$event.preventDefault(); submitSearch()">
+        <span class="material-symbols-outlined">search</span>
+        <input
+          type="search"
+          placeholder="Tìm chức năng..."
+          [value]="search()"
+          (input)="search.set($any($event.target).value)"
+          (focus)="launcherOpen.set(true)" />
+        @if (search()) {
+          <button type="button" (click)="search.set('')" aria-label="Xóa tìm kiếm">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        }
+      </form>
+
+      <nav class="header-actions">
+        <a class="header-link desktop-action" [routerLink]="homeRoute()">
+          <span class="material-symbols-outlined">home</span><span>Trang chủ</span>
+        </a>
+        <a class="header-link notification-link" routerLink="/notifications">
+          <span class="material-symbols-outlined">notifications</span><span class="desktop-action">Tin tức</span>
+          @if (unreadCount() > 0) { <b>{{ unreadCount() > 99 ? '99+' : unreadCount() }}</b> }
+        </a>
+        <button class="theme-button" type="button" (click)="toggleTheme()" [attr.aria-label]="darkMode() ? 'Bật giao diện sáng' : 'Bật giao diện tối'">
+          <span class="material-symbols-outlined">{{ darkMode() ? 'light_mode' : 'dark_mode' }}</span>
+        </button>
+        <button class="account-button" type="button" (click)="userMenuOpen.set(!userMenuOpen())">
+          <span class="account-avatar">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+          <span class="account-copy"><strong>{{ user()?.fullName }}</strong><small>{{ user()?.role }}</small></span>
+          <span class="material-symbols-outlined">arrow_drop_down</span>
+        </button>
+      </nav>
+    </div>
+
+    <nav class="role-nav">
+      @for (item of primaryNav(); track item.route) {
+        <a [routerLink]="item.route" routerLinkActive="active">
+          <span class="material-symbols-outlined">{{ item.icon }}</span>{{ item.label }}
+        </a>
+      }
+      @if (nav().length > primaryNav().length) {
+        <button type="button" (click)="launcherOpen.set(true)">
+          <span class="material-symbols-outlined">more_horiz</span> Xem thêm
+        </button>
+      }
+    </nav>
+  </header>
+
+  <button
+    #floatingLauncher
+    class="floating-launcher-button"
+    type="button"
+    [class.dragging]="launcherDragging()"
+    [style.left.px]="launcherPosition().x"
+    [style.top.px]="launcherPosition().y"
+    (pointerdown)="startLauncherDrag($event)"
+    (pointermove)="moveLauncherDrag($event)"
+    (pointerup)="endLauncherDrag($event)"
+    (pointercancel)="endLauncherDrag($event)"
+    (keydown)="handleLauncherKeydown($event)"
+    aria-label="Mở danh mục chức năng. Có thể kéo biểu tượng đến vị trí khác."
+    title="Kéo để di chuyển, bấm để mở danh mục"
+    [attr.aria-expanded]="launcherOpen()">
+    <span class="material-symbols-outlined">apps</span>
+    <span class="floating-launcher-label">Danh mục</span>
+  </button>
+
+  @if (launcherOpen()) {
+    <div class="portal-overlay" (click)="launcherOpen.set(false)"></div>
+    <aside class="launcher-panel">
+      <div class="launcher-heading">
+        <div><span>Danh mục</span><strong>Chức năng hệ thống</strong></div>
+        <button class="icon-button" type="button" (click)="launcherOpen.set(false)"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="launcher-search-result">
+        @for (item of filteredNav(); track item.route) {
+          <a [routerLink]="item.route" routerLinkActive="active" (click)="closeMenus()">
+            <span class="launcher-icon material-symbols-outlined">{{ item.icon }}</span>
+            <span><strong>{{ item.label }}</strong><small>{{ item.description || 'Mở chức năng' }}</small></span>
+            <span class="material-symbols-outlined">chevron_right</span>
+          </a>
+        } @empty {
+          <div class="empty compact-empty">Không tìm thấy chức năng phù hợp.</div>
+        }
+      </div>
+    </aside>
+  }
+
+  @if (userMenuOpen()) {
+    <div class="menu-overlay" (click)="userMenuOpen.set(false)"></div>
+    <div class="account-menu">
+      <div class="account-summary">
+        <span class="account-avatar large">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+        <div><strong>{{ user()?.fullName }}</strong><small>{{ user()?.email }}</small></div>
+      </div>
+      <a routerLink="/profile" (click)="userMenuOpen.set(false)"><span class="material-symbols-outlined">person</span> Hồ sơ cá nhân</a>
+      <a routerLink="/notifications" (click)="userMenuOpen.set(false)"><span class="material-symbols-outlined">notifications</span> Thông báo</a>
+      <button type="button" (click)="logout()"><span class="material-symbols-outlined">logout</span> Đăng xuất</button>
+    </div>
+  }
+
+  <main class="portal-content"><router-outlet /></main>
+  <app-toast-container />
 </div>

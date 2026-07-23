@@ -1,2 +1,190 @@
-<app-page-header [title]="user()?.role==='Student'?'Xin chào, '+user()?.fullName:'Tổng quan hệ thống'" subtitle="Dữ liệu được cập nhật trực tiếp từ MongoDB Aggregation Framework."><button class="secondary-button"><span class="material-symbols-outlined">download</span> Xuất báo cáo</button></app-page-header>
-@if(loading()){<app-loading/>}@else if(data();as d){<section class="stats-grid">@for(c of d.cards;track c.label){<app-stat-card [label]="c.label" [value]="c.value" [icon]="c.icon" [trend]="c.trend||''" [tone]="c.tone||'primary'"/>}</section><section class="dashboard-grid"><article class="panel chart-panel"><div class="panel-heading"><div><h3>Phân bố kết quả</h3><p>Tổng hợp dữ liệu điểm đã công bố</p></div><span class="badge success">MongoDB Pipeline</span></div><div class="bar-chart">@for(item of d.gradeDistribution;track item.label){<div class="bar-row"><span>{{item.label}}</span><div><i [style.width.%]="item.value/max()*100"></i></div><b>{{item.value}}</b></div>}</div></article><article class="panel"><div class="panel-heading"><div><h3>Cảnh báo cần xử lý</h3><p>Các vấn đề cần chú ý</p></div></div><div class="alert-list">@for(a of d.alerts;track a.title){<div class="alert-item" [class]="a.tone"><span class="material-symbols-outlined">warning</span><div><b>{{a.title}}</b><p>{{a.detail}}</p></div></div>}</div></article><article class="panel span-2"><div class="panel-heading"><div><h3>Hoạt động gần đây</h3><p>Nhật ký hệ thống và cập nhật học tập</p></div><button class="text-button">Xem tất cả</button></div><div class="activity-list">@for(a of d.recentActivities;track a.title+a.time){<div><span class="activity-icon material-symbols-outlined">{{a.icon}}</span><div><b>{{a.title}}</b><p>{{a.description}}</p></div><time>{{a.time}}</time></div>}</div></article></section>}
+@if (loading()) {
+  <app-loading />
+} @else if (data(); as dashboard) {
+  <section class="portal-welcome">
+    <div>
+      <span class="welcome-kicker">{{ roleName() }} · {{ todayLabel() }}</span>
+      <h1>Xin chào, {{ user()?.fullName }}</h1>
+      <p>Dữ liệu học tập và tác vụ được đồng bộ trực tiếp từ hệ thống.</p>
+    </div>
+    <button class="secondary-button" type="button" (click)="print()"><span class="material-symbols-outlined">print</span> In trang</button>
+  </section>
+
+  <section class="dashboard-top-grid">
+    <article class="student-info-card panel">
+      <div class="profile-avatar-block">
+        @if (profile()?.avatarUrl) {
+          <img [src]="profile()?.avatarUrl" alt="Ảnh đại diện" />
+        } @else {
+          <span>{{ profile()?.fullName?.charAt(0) || 'U' }}</span>
+        }
+        <a routerLink="/profile">Xem chi tiết</a>
+      </div>
+      <div class="profile-details">
+        <div class="panel-title-row"><div><span class="eyebrow">THÔNG TIN {{ roleName().toLocaleUpperCase('vi') }}</span><h2>{{ profile()?.fullName }}</h2></div><span class="status-chip success">{{ profile()?.status || 'Active' }}</span></div>
+        <div class="profile-field-grid">
+          @if (isStudent()) {
+            <div><span>Mã sinh viên</span><strong>{{ profile()?.studentCode || '—' }}</strong></div>
+            <div><span>Lớp học</span><strong>{{ profile()?.administrativeClass || '—' }}</strong></div>
+            <div><span>Giới tính</span><strong>{{ profile()?.gender || '—' }}</strong></div>
+            <div><span>Khóa học</span><strong>{{ profile()?.cohort || '—' }}</strong></div>
+            <div><span>Ngày sinh</span><strong>{{ profile()?.dateOfBirth ? (profile()?.dateOfBirth | date:'dd/MM/yyyy') : '—' }}</strong></div>
+            <div><span>Ngành</span><strong>{{ profile()?.programName || '—' }}</strong></div>
+            <div class="wide"><span>Khoa</span><strong>{{ profile()?.facultyName || '—' }}</strong></div>
+          } @else if (isLecturer()) {
+            <div><span>Mã giảng viên</span><strong>{{ profile()?.lecturerCode || '—' }}</strong></div>
+            <div><span>Học vị</span><strong>{{ profile()?.degree || '—' }}</strong></div>
+            <div><span>Chức danh</span><strong>{{ profile()?.jobTitle || '—' }}</strong></div>
+            <div><span>Bộ môn</span><strong>{{ profile()?.department || '—' }}</strong></div>
+            <div class="wide"><span>Khoa</span><strong>{{ profile()?.facultyName || '—' }}</strong></div>
+          } @else {
+            <div><span>Tài khoản</span><strong>{{ profile()?.username }}</strong></div>
+            <div><span>Email</span><strong>{{ profile()?.email }}</strong></div>
+            <div><span>Vai trò</span><strong>Quản trị toàn hệ thống</strong></div>
+            <div><span>Đăng nhập gần nhất</span><strong>{{ profile()?.lastLoginAt ? (profile()?.lastLoginAt | date:'dd/MM/yyyy HH:mm') : '—' }}</strong></div>
+          }
+        </div>
+      </div>
+    </article>
+
+    <div class="summary-stack">
+      @for (card of dashboard.cards.slice(0, 3); track card.label) {
+        <article class="summary-card" [class]="card.tone || 'primary'">
+          <div><span>{{ card.label }}</span><strong>{{ card.value }}</strong><small>{{ card.trend }}</small></div>
+          <span class="material-symbols-outlined">{{ card.icon }}</span>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="quick-action-grid">
+    @for (action of quickActions(); track action.route + action.label) {
+      <a class="quick-action" [routerLink]="action.route">
+        <span class="material-symbols-outlined">{{ action.icon }}</span>
+        <strong>{{ action.label }}</strong>
+      </a>
+    }
+  </section>
+
+  <section class="dashboard-main-grid">
+    @if (isStudent()) {
+      <article class="panel result-chart-card semester-result-card">
+        <div class="semester-chart-heading">
+          <div class="semester-chart-title">
+            <span class="eyebrow">KẾT QUẢ THEO HỌC KỲ</span>
+            <h3>Kết quả học tập</h3>
+            <p>Điểm tổng kết từng môn theo thang điểm 10 của học kỳ đã chọn.</p>
+          </div>
+          <div class="semester-chart-controls">
+            <select aria-label="Chọn học kỳ" [value]="selectedSemesterKey()" (change)="onSemesterChange($event)">
+              @for (option of semesterOptions(); track option.key) {
+                <option [value]="option.key">{{ option.label }}</option>
+              }
+            </select>
+            @if (semesterChart()?.allCoursesGraded) {
+              <div class="semester-average-label" aria-live="polite"><span>TB học kỳ</span><strong>{{ semesterChart()?.average10 }}/10</strong></div>
+            }
+          </div>
+        </div>
+
+        @if (semesterChart(); as chart) {
+          @if (chart.allCoursesGraded && chart.courses.length > 0) {
+            <div class="semester-score-chart" role="img" aria-label="Biểu đồ điểm tổng kết từng môn theo thang điểm 10">
+              <div class="score-y-axis">
+                <span>10</span><span>8</span><span>6</span><span>4</span><span>2</span><span>0</span>
+              </div>
+              <div class="score-plot">
+                <div class="score-grid-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="score-bars">
+                  @for (course of chart.courses; track course.courseCode) {
+                    <div class="score-bar-column" [title]="course.courseName + ': ' + course.finalScore10 + '/10'">
+                      <strong>{{ course.finalScore10 }}</strong>
+                      <div class="score-bar-shell"><i [style.height.%]="chartBarHeight(course.finalScore10)"></i></div>
+                      <span>{{ course.courseName }}</span>
+                      @if (course.excludeFromGpa) { <small>* Không tính GPA</small> }
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="semester-chart-unavailable">
+              <span class="material-symbols-outlined">pending_actions</span>
+              <div><strong>Học kỳ chưa đủ điểm</strong><p>Biểu đồ chỉ hiển thị khi tất cả học phần trong kỳ đã được công bố đầy đủ điểm.</p></div>
+            </div>
+          }
+        } @else {
+          <div class="semester-chart-unavailable"><span class="material-symbols-outlined">bar_chart</span><p>Chọn học kỳ để xem kết quả.</p></div>
+        }
+      </article>
+    } @else {
+      <article class="panel result-chart-card">
+        <div class="panel-heading"><div><h3>Phân bố trạng thái</h3></div></div>
+        <div class="portal-bar-chart">
+          @for (item of dashboard.gradeDistribution; track item.label) {
+            <div class="portal-bar-column"><div class="bar-value">{{ item.value }}</div><div class="bar-track"><i [style.height.%]="item.value / maxDistribution() * 100"></i></div><strong>{{ item.label }}</strong></div>
+          } @empty { <div class="empty compact-empty">Chưa có dữ liệu phân bố.</div> }
+        </div>
+      </article>
+    }
+
+    <article class="panel progress-card">
+      <div class="panel-heading"><div><span class="eyebrow">TIẾN ĐỘ</span><h3>{{ isStudent() ? 'Tiến độ học tập' : 'Tiến độ công việc' }}</h3></div></div>
+      @if (isStudent()) {
+        <div class="progress-donut" [style.--progress]="progressPercent() + '%'">
+          <div><strong>{{ progressPercent() }}%</strong><span>{{ passedCredits() }}/{{ requiredCredits() }} tín chỉ</span></div>
+        </div>
+      } @else {
+        <div class="status-overview">
+          @for (card of dashboard.cards; track card.label) {
+            <div><span>{{ card.label }}</span><strong>{{ card.value }}</strong></div>
+          }
+        </div>
+      }
+    </article>
+
+    <article class="panel current-classes-card">
+      <div class="panel-heading"><div><span class="eyebrow">HỌC PHẦN</span><h3>{{ isLecturer() ? 'Lớp đang phụ trách' : isStudent() ? 'Lớp học phần' : 'Cảnh báo hệ thống' }}</h3></div></div>
+      @if (!isAdmin()) {
+        <div class="compact-class-list">
+          @for (item of currentItems(); track $any(item).classSectionId || $any(item).id) {
+            <a [routerLink]="classRoute($any(item).classSectionId || $any(item).id)">
+              <span class="course-code">{{ $any(item).courseCode }}</span>
+              <span><strong>{{ $any(item).courseName }}</strong><small>{{ $any(item).classSectionCode }} · {{ $any(item).lecturerName || $any(item).semesterName }}</small></span>
+              <span class="material-symbols-outlined">chevron_right</span>
+            </a>
+          } @empty {
+            <div class="empty compact-empty">Chưa có lớp học phần.</div>
+          }
+        </div>
+      } @else {
+        <div class="alert-list">
+          @for (alert of dashboard.alerts; track alert.title) {
+            <div class="alert-item" [class]="alert.tone"><span class="material-symbols-outlined">warning</span><div><b>{{ alert.title }}</b><p>{{ alert.detail }}</p></div></div>
+          }
+        </div>
+      }
+    </article>
+  </section>
+
+  <section class="dashboard-bottom-grid">
+    <article class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">NHẮC VIỆC</span><h3>Cảnh báo cần chú ý</h3></div></div>
+      <div class="alert-list">
+        @for (alert of dashboard.alerts; track alert.title) {
+          <div class="alert-item" [class]="alert.tone"><span class="material-symbols-outlined">{{ alert.tone === 'success' ? 'check_circle' : 'notification_important' }}</span><div><b>{{ alert.title }}</b><p>{{ alert.detail }}</p></div></div>
+        }
+      </div>
+    </article>
+    <article class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">NHẬT KÝ</span><h3>Hoạt động gần đây</h3></div></div>
+      <div class="activity-list">
+        @for (activity of dashboard.recentActivities; track activity.title + activity.time) {
+          <div><span class="activity-icon material-symbols-outlined">{{ activity.icon }}</span><div><b>{{ activity.title }}</b><p>{{ activity.description }}</p></div><time>{{ activity.time }}</time></div>
+        } @empty {
+          <div class="empty compact-empty">Chưa có hoạt động mới.</div>
+        }
+      </div>
+    </article>
+  </section>
+}

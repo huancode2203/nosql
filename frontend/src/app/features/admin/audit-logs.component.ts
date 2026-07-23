@@ -1,0 +1,12 @@
+import { Component, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../core/services/api.service';
+import { PagedResult } from '../../core/models/api.models';
+import { PageHeaderComponent } from '../../shared/page-header.component';
+
+@Component({ standalone: true, imports: [DatePipe, FormsModule, PageHeaderComponent], template: `
+<app-page-header title="Nhật ký hệ thống" subtitle="Theo dõi đăng nhập, thay đổi dữ liệu, nhập điểm, backup và restore."></app-page-header>
+<article class="panel table-panel"><div class="table-toolbar"><div class="search-box"><span class="material-symbols-outlined">search</span><input [(ngModel)]="search" (keyup.enter)="page=1;load()" placeholder="Người dùng, hành động, đối tượng..."/><button (click)="page=1;load()">Tìm</button></div></div><div class="table-wrap"><table><thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Vai trò</th><th>Hành động</th><th>Đối tượng</th><th>Kết quả</th><th>IP</th></tr></thead><tbody>@for(item of items();track item['id']){<tr><td>{{item['createdAt']|date:'dd/MM/yyyy HH:mm:ss'}}</td><td>{{item['userName']||item['userId']}}</td><td><span class="badge">{{item['role']}}</span></td><td><b>{{item['action']}}</b></td><td>{{item['entity']}} {{item['entityId']||''}}</td><td><span class="badge" [class.success]="item['result']==='Success'" [class.danger]="item['result']!=='Success'">{{item['result']}}</span></td><td>{{item['ipAddress']}}</td></tr>}@empty{<tr><td colspan="7" class="empty">Chưa có nhật ký</td></tr>}</tbody></table></div><footer class="table-footer"><span>{{total}} bản ghi</span><div><button [disabled]="page===1" (click)="previous()">Trước</button><b>{{page}}</b><button [disabled]="items().length<20" (click)="next()">Sau</button></div></footer></article>
+` })
+export class AuditLogsComponent implements OnInit { items = signal<Record<string, any>[]>([]); search = ''; page = 1; total = 0; constructor(private api: ApiService) {} ngOnInit() { this.load(); } load() { this.api.get<PagedResult<Record<string, any>>>('/admin/audit-logs', { search: this.search, pageNumber: this.page, pageSize: 20 }).subscribe(response => { this.items.set(response.data.items); this.total = response.data.totalItems; }); } previous() { if (this.page > 1) { this.page -= 1; this.load(); } } next() { this.page += 1; this.load(); } }

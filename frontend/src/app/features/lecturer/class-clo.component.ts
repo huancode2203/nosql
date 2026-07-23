@@ -1,0 +1,9 @@
+import { Component, OnInit, input, signal } from '@angular/core';
+import { ApiService } from '../../core/services/api.service';
+import { ClassCloStatistic } from '../../core/models/portal.models';
+import { PageHeaderComponent } from '../../shared/page-header.component';
+
+@Component({ standalone: true, imports: [PageHeaderComponent], template: `
+<app-page-header title="Thống kê CLO của lớp" subtitle="Tỷ lệ đạt từng chuẩn đầu ra, tính trực tiếp bằng MongoDB Aggregation."></app-page-header><div class="clo-grid">@for(item of items();track item.cloCode){<article class="panel clo-card"><div class="panel-heading"><div><span class="eyebrow">{{item.cloCode}}</span><h3>{{item.description}}</h3></div><span class="badge" [class.success]="item.averagePercentage>=item.threshold" [class.danger]="item.averagePercentage<item.threshold">{{item.averagePercentage>=item.threshold?'Đạt':'Chưa đạt'}}</span></div><div class="progress-row"><div><i [style.width.%]="item.averagePercentage"></i><em [style.left.%]="item.threshold"></em></div><strong>{{item.averagePercentage}}%</strong></div><div class="result-summary"><div><b>{{item.passedStudents}}</b><span>Sinh viên đạt</span></div><div><b>{{item.totalStudents-item.passedStudents}}</b><span>Chưa đạt</span></div><div><b>{{item.passRate}}%</b><span>Tỷ lệ đạt</span></div></div><small>Ngưỡng yêu cầu: {{item.threshold}}%</small></article>}@empty{<article class="panel empty-state"><span class="material-symbols-outlined">radar</span><h3>Chưa có dữ liệu CLO</h3></article>}</div>
+` })
+export class ClassCloComponent implements OnInit { id = input.required<string>(); items = signal<ClassCloStatistic[]>([]); constructor(private api: ApiService) {} ngOnInit() { this.api.get<ClassCloStatistic[]>(`/lecturer/classes/${this.id()}/clo`).subscribe(response => this.items.set(response.data)); } }
