@@ -7,7 +7,7 @@ using MongoDB.Driver;
 
 namespace EduManageLms.Api.Application;
 
-public sealed class LecturerPortalService(MongoContext db, IGradebookService gradebook) : ILecturerPortalService
+public sealed class LecturerPortalService(MongoContext db, IGradebookService gradebook, ScoreNormalizationService scoreNormalizer) : ILecturerPortalService
 {
     public async Task<IReadOnlyCollection<LecturerClassDto>> GetClassesAsync(string lecturerCode, CancellationToken ct)
     {
@@ -363,7 +363,7 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
             var errors = new List<string>();
             var student = book.Students.FirstOrDefault(x => x.StudentCode.Equals(code, StringComparison.OrdinalIgnoreCase));
             if (student is null) errors.Add("Sinh viên không thuộc lớp");
-            var scores = new Dictionary<string, double?>();
+            var scores = new Dictionary<string, string?>();
             foreach (var component in book.Components)
             {
                 if (!headers.TryGetValue(component.ComponentId, out var componentColumn))
@@ -371,11 +371,30 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
                     errors.Add($"Thiếu cột {component.ComponentId}");
                     continue;
                 }
+
                 var cell = row.Cell(componentColumn);
-                if (cell.IsEmpty()) { scores[component.ComponentId] = null; continue; }
-                if (!cell.TryGetValue<double>(out var score)) errors.Add($"{component.ComponentId}: không phải số");
-                else if (score < 0 || score > component.MaxScore) errors.Add($"{component.ComponentId}: phải từ 0 đến {component.MaxScore}");
-                else scores[component.ComponentId] = score;
+                if (cell.IsEmpty())
+                {
+                    scores[component.ComponentId] = null;
+                    continue;
+                }
+
+                var rawScore = cell.GetFormattedString().Trim();
+                try
+                {
+                    var normalized = scoreNormalizer.Normalize(rawScore, (decimal)component.MaxScore);
+                    if (normalized.RequiresConfirmation)
+                    {
+                        errors.Add($"{component.ComponentId}: giá trị {rawScore} cần xác nhận thủ công trước khi import");
+                        continue;
+                    }
+
+                    scores[component.ComponentId] = rawScore;
+                }
+                catch (AppException ex)
+                {
+                    errors.Add($"{component.ComponentId}: {ex.Message}");
+                }
             }
             var data = new Dictionary<string, object?> { ["studentCode"] = code, ["fullName"] = student?.FullName };
             foreach (var value in scores) data[value.Key] = value.Value;

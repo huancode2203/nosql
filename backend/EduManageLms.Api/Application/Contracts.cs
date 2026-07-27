@@ -1,3 +1,4 @@
+using System.Globalization;
 using EduManageLms.Api.Common;
 
 namespace EduManageLms.Api.Application;
@@ -17,11 +18,76 @@ public sealed record GradeComponentDto(string ComponentId, string ComponentName,
 public sealed record CourseGradeDto(string CourseId, string CourseCode, string CourseName, int Credits, string ClassSectionCode, string LecturerName, IReadOnlyCollection<GradeComponentDto> Scores, double FinalScore, string LetterGrade, double GradePoint, string Classification, bool Passed, DateTime? PublishedAt);
 public sealed record StudentGpaDto(double Gpa, double Average10, int TotalCredits, int PassedCredits, string Classification);
 public sealed record CloResultDto(string CourseCode, string CourseName, string CloCode, string Description, double Percentage, double Threshold, bool Passed, IReadOnlyCollection<string> ContributingComponents);
-public sealed record GradebookComponentDto(string ComponentId, string ComponentName, double Weight, double MaxScore);
-public sealed record GradebookStudentDto(string StudentId, string StudentCode, string FullName, Dictionary<string, double?> Scores, double FinalScore, string LetterGrade, bool Passed);
-public sealed record GradebookDto(string ClassSectionId, string ClassSectionCode, string CourseName, string Status, IReadOnlyCollection<GradebookComponentDto> Components, IReadOnlyCollection<GradebookStudentDto> Students);
-public sealed record GradeUpdateStudent(string StudentId, Dictionary<string, double?> Scores);
-public sealed record GradeUpdateRequest(IReadOnlyCollection<GradeUpdateStudent> Students, bool Publish);
+public sealed record GradebookComponentDto(
+    string ComponentId,
+    string ComponentName,
+    double Weight,
+    double MaxScore);
+
+public sealed record GradebookStudentDto(
+    string StudentId,
+    string StudentCode,
+    string FullName,
+    Dictionary<string, string?> Scores,
+    double FinalScore,
+    string LetterGrade,
+    bool Passed,
+    int Version = 0)
+{
+    // Tương thích các service cũ đang tạo DTO từ Dictionary<string, double?>.
+    public GradebookStudentDto(
+        string studentId,
+        string studentCode,
+        string fullName,
+        Dictionary<string, double?> scores,
+        double finalScore,
+        string letterGrade,
+        bool passed)
+        : this(
+            studentId,
+            studentCode,
+            fullName,
+            scores.ToDictionary(
+                item => item.Key,
+                item => item.Value?.ToString("0.################", CultureInfo.InvariantCulture)),
+            finalScore,
+            letterGrade,
+            passed,
+            0)
+    {
+    }
+}
+
+public sealed record GradebookDto(
+    string ClassSectionId,
+    string ClassSectionCode,
+    string CourseName,
+    string Status,
+    IReadOnlyCollection<GradebookComponentDto> Components,
+    IReadOnlyCollection<GradebookStudentDto> Students);
+
+public sealed record GradeUpdateStudent(
+    string StudentId,
+    Dictionary<string, string?> Scores,
+    IReadOnlyCollection<string>? ConfirmedComponents = null,
+    int? Version = null)
+{
+    // Tương thích import Excel cũ đang tạo Dictionary<string, double?>.
+    public GradeUpdateStudent(string studentId, Dictionary<string, double?> scores)
+        : this(
+            studentId,
+            scores.ToDictionary(
+                item => item.Key,
+                item => item.Value?.ToString("0.################", CultureInfo.InvariantCulture)),
+            null,
+            null)
+    {
+    }
+}
+
+public sealed record GradeUpdateRequest(
+    IReadOnlyCollection<GradeUpdateStudent> Students,
+    bool Publish);
 
 public interface IAuthService
 {

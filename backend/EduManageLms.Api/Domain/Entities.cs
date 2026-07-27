@@ -6,9 +6,48 @@ public sealed class RefreshToken { public string TokenHash{get;set;}=""; public 
 public sealed class FacultySnapshot { [BsonRepresentation(BsonType.ObjectId)] public string? FacultyId{get;set;} public string FacultyCode{get;set;}=""; public string FacultyName{get;set;}=""; }
 public sealed class ProgramSnapshot { [BsonRepresentation(BsonType.ObjectId)] public string? ProgramId{get;set;} public string ProgramCode{get;set;}=""; public string ProgramName{get;set;}=""; public int RequiredCredits{get;set;} }
 public sealed class LecturerSnapshot { [BsonRepresentation(BsonType.ObjectId)] public string? LecturerId{get;set;} public string LecturerCode{get;set;}=""; public string FullName{get;set;}=""; }
-public sealed class ScoreComponent { public string ComponentId{get;set;}=""; public string ComponentName{get;set;}=""; public string Type{get;set;}=""; public double Weight{get;set;} public double MaxScore{get;set;}=10; public double? Score{get;set;} public string Status{get;set;}="NotGraded"; public bool IsRequired{get;set;} public double? MinimumScore{get;set;} public List<CloMapping> CloMappings{get;set;}=[]; }
+public sealed class ScoreComponent
+{
+    public string ComponentId { get; set; } = "";
+    public string ComponentName { get; set; } = "";
+    public string Type { get; set; } = "";
+    public double Weight { get; set; }
+    public double MaxScore { get; set; } = 10;
+    public double? Score { get; set; }
+
+    // Dữ liệu gốc và thông tin chuẩn hóa phục vụ kiểm tra/audit.
+    public string RawInput { get; set; } = "";
+    public string NormalizationType { get; set; } = "None";
+    public bool RequiresConfirmation { get; set; }
+    public string EnteredBy { get; set; } = "";
+    public DateTime? EnteredAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+
+    public string Status { get; set; } = "NotGraded";
+    public bool IsRequired { get; set; }
+    public double? MinimumScore { get; set; }
+    public List<CloMapping> CloMappings { get; set; } = [];
+}
 public sealed class CloMapping { public string CloCode{get;set;}=""; public double MappingWeight{get;set;} }
-public sealed class StudentCourseRecord { [BsonRepresentation(BsonType.ObjectId)] public string CourseId{get;set;}=""; public string CourseCode{get;set;}=""; public string CourseName{get;set;}=""; public int Credits{get;set;} public bool ExcludeFromGpa{get;set;} [BsonRepresentation(BsonType.ObjectId)] public string ClassSectionId{get;set;}=""; public string ClassSectionCode{get;set;}=""; public LecturerSnapshot Lecturer{get;set;}=new(); public int GradingSchemeVersion{get;set;}=1; public List<ScoreComponent> Scores{get;set;}=[]; public int AttemptNumber{get;set;}=1; public string ScoreStatus{get;set;}="Draft"; public DateTime? PublishedAt{get;set;} }
+public sealed class StudentCourseRecord
+{
+    [BsonRepresentation(BsonType.ObjectId)] public string CourseId { get; set; } = "";
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int Credits { get; set; }
+    public bool ExcludeFromGpa { get; set; }
+    [BsonRepresentation(BsonType.ObjectId)] public string ClassSectionId { get; set; } = "";
+    public string ClassSectionCode { get; set; } = "";
+    public LecturerSnapshot Lecturer { get; set; } = new();
+    public int GradingSchemeVersion { get; set; } = 1;
+    public List<ScoreComponent> Scores { get; set; } = [];
+    public int AttemptNumber { get; set; } = 1;
+    public string ScoreStatus { get; set; } = "Draft";
+    public DateTime? PublishedAt { get; set; }
+
+    // Optimistic concurrency cho thao tác nhập điểm.
+    public int Version { get; set; }
+}
 public sealed class SemesterRecord { [BsonRepresentation(BsonType.ObjectId)] public string SemesterId{get;set;}=""; public string SemesterCode{get;set;}=""; public string SemesterName{get;set;}=""; public List<StudentCourseRecord> Courses{get;set;}=[]; }
 public sealed class AcademicRecord { [BsonRepresentation(BsonType.ObjectId)] public string AcademicYearId{get;set;}=""; public string AcademicYearName{get;set;}=""; public List<SemesterRecord> Semesters{get;set;}=[]; }
 public sealed class Student:Document { public string StudentCode{get;set;}=""; public string FullName{get;set;}=""; public string Email{get;set;}=""; public string Phone{get;set;}=""; public string Address{get;set;}=""; public string Gender{get;set;}=""; public DateTime? DateOfBirth{get;set;} public FacultySnapshot Faculty{get;set;}=new(); public ProgramSnapshot Program{get;set;}=new(); public string Cohort{get;set;}=""; public string AdministrativeClass{get;set;}=""; public string Status{get;set;}="Studying"; public List<AcademicRecord> AcademicRecords{get;set;}=[]; }

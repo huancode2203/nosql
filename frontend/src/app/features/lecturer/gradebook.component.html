@@ -1,4 +1,338 @@
-<app-page-header title="Nhập điểm lớp học phần" subtitle="Điểm tổng kết được tính tự động theo cấu trúc điểm động."><div class="button-group"><label class="secondary-button file-button"><span class="material-symbols-outlined">upload_file</span> Import Excel<input type="file" accept=".xlsx" (change)="chooseImport($any($event.target).files)"/></label><button class="secondary-button" (click)="exportData()"><span class="material-symbols-outlined">download</span> Export</button><button class="secondary-button" (click)="save(false)" [disabled]="saving()">Lưu nháp</button><button class="primary-button" (click)="save(true)" [disabled]="saving()">Công bố điểm</button></div></app-page-header>
-@if(loading()){<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div></div>}
-@if(book();as book){<article class="panel"><div class="gradebook-meta"><div><span>Lớp học phần</span><b>{{book.classSectionCode}} · {{book.courseName}}</b></div><div class="button-group"><span class="badge" [class.success]="book.status==='Published'">{{book.status}}</span>@if(book.status==='Published'||book.status==='Locked'){<button class="text-button" (click)="requestReopen()">Yêu cầu mở lại</button>}</div></div><div class="table-wrap gradebook"><table><thead><tr><th>STT</th><th>Mã SV</th><th>Họ và tên</th>@for(component of book.components;track component.componentId){<th>{{component.componentName}}<small>{{component.weight}}% · tối đa {{component.maxScore}}</small></th>}<th>Tổng kết</th><th>Điểm chữ</th><th>Kết quả</th></tr></thead><tbody>@for(student of book.students;track student.studentId;let index=$index){<tr [class.dirty-row]="student.dirty"><td>{{index+1}}</td><td><b>{{student.studentCode}}</b></td><td>{{student.fullName}}</td>@for(component of book.components;track component.componentId){<td><input class="score-input" type="number" min="0" [max]="component.maxScore" [disabled]="book.status==='Locked'" [ngModel]="student.scores[component.componentId]" (ngModelChange)="change(student,component.componentId,$event,component.maxScore)"/></td>}<td><b>{{student.finalScore}}</b></td><td><span class="grade-badge">{{student.letterGrade}}</span></td><td><span class="badge" [class.success]="student.passed" [class.danger]="!student.passed">{{student.passed?'Đạt':'Không đạt'}}</span></td></tr>}</tbody></table></div></article>}
-@if(importModal()&&importPreview();as preview){<div class="modal-backdrop" (click)="importModal.set(false)"><section class="modal wide-modal" (click)="$event.stopPropagation()"><div class="modal-heading"><div><h3>Xem trước import điểm</h3><p>{{preview.validRows}} hợp lệ · {{preview.invalidRows}} lỗi</p></div><button class="icon-button" (click)="importModal.set(false)"><span class="material-symbols-outlined">close</span></button></div><div class="table-wrap compact-table"><table><thead><tr><th>Dòng</th><th>Mã SV</th><th>Họ tên</th><th>Kết quả</th></tr></thead><tbody>@for(row of preview.rows;track row.rowNumber){<tr><td>{{row.rowNumber}}</td><td>{{row.data['studentCode']}}</td><td>{{row.data['fullName']}}</td><td><span class="badge" [class.success]="row.valid" [class.danger]="!row.valid">{{row.valid?'Hợp lệ':row.errors.join('; ')}}</span></td></tr>}</tbody></table></div><div class="modal-actions"><button class="secondary-button" (click)="importModal.set(false)">Đóng</button><button class="primary-button" [disabled]="preview.invalidRows>0" (click)="commitImport()">Xác nhận import</button></div></section></div>}
+<section class="gradebook-page">
+  <app-page-header
+    title="Bảng điểm lớp học phần"
+    subtitle="Nhập điểm, lưu bản nháp và gửi bảng điểm để quản trị viên kiểm tra">
+
+    <div actions class="gradebook-actions">
+      <label class="action-button action-button--secondary">
+        <svg
+          class="action-button__icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true">
+          <path
+            d="M12 3v11m0-11 4 4m-4-4L8 7M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+        </svg>
+        <span>Import Excel</span>
+        <input
+          type="file"
+          accept=".xlsx"
+          hidden
+          (change)="chooseImport($any($event.target).files)">
+      </label>
+
+      <button
+        class="action-button action-button--secondary"
+        type="button"
+        (click)="exportData()">
+        <svg
+          class="action-button__icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true">
+          <path
+            d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+        </svg>
+        <span>Export</span>
+      </button>
+
+      <button
+        class="action-button action-button--secondary"
+        type="button"
+        [disabled]="saving()"
+        (click)="save(false)">
+        <svg
+          class="action-button__icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true">
+          <path
+            d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" />
+        </svg>
+        <span>Lưu nháp</span>
+      </button>
+
+      <button
+        class="action-button action-button--primary"
+        type="button"
+        [disabled]="
+          saving()
+          || book()?.status === 'Submitted'
+          || book()?.status === 'Published'
+          || book()?.status === 'Locked'
+        "
+        (click)="save(true)">
+        <svg
+          class="action-button__icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true">
+          <path
+            d="m3 11 18-8-8 18-2-8-8-2Zm8 2 4-4" />
+        </svg>
+        <span>Gửi duyệt</span>
+      </button>
+    </div>
+  </app-page-header>
+
+  @if (loading()) {
+    <div class="gradebook-card gradebook-loading">
+      Đang tải bảng điểm...
+    </div>
+  }
+
+  @if (book(); as book) {
+    <section class="gradebook-card">
+      <header class="gradebook-card__header">
+        <div class="gradebook-card__identity">
+          <span class="gradebook-card__eyebrow">
+            Lớp học phần
+          </span>
+          <h2>{{ book.courseName }}</h2>
+          <p>{{ book.classSectionCode }}</p>
+        </div>
+
+        <span
+          class="status-pill"
+          [attr.data-status]="book.status">
+          {{ statusLabel(book.status) }}
+        </span>
+      </header>
+
+      <div class="gradebook-notice">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 10v6M12 7h.01" />
+        </svg>
+        <span>
+          Chỉ được nhập chữ số. Có thể dùng dấu phẩy hoặc dấu chấm
+          cho phần thập phân, ví dụ: <strong>7,5</strong> hoặc
+          <strong>7.5</strong>.
+        </span>
+      </div>
+
+      <div class="gradebook-table-wrapper">
+        <table class="gradebook-table">
+          <thead>
+            <tr>
+              <th class="index-column">STT</th>
+              <th class="student-code-column">Mã SV</th>
+              <th class="student-name-column">Họ và tên</th>
+
+              @for (
+                component of book.components;
+                track component.componentId
+              ) {
+                <th class="score-column">
+                  <span>{{ component.componentName }}</span>
+                  <small>
+                    {{ component.weight }}% · tối đa
+                    {{ component.maxScore }}
+                  </small>
+                </th>
+              }
+
+              <th class="final-score-column">Tổng kết</th>
+              <th class="letter-column">Điểm chữ</th>
+              <th class="result-column">Kết quả</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (
+              student of book.students;
+              track student.studentId;
+              let index = $index
+            ) {
+              <tr>
+                <td class="index-column">
+                  {{ index + 1 }}
+                </td>
+
+                <td class="student-code-column">
+                  {{ student.studentCode }}
+                </td>
+
+                <td class="student-name-column">
+                  <span class="student-name">
+                    {{ student.fullName }}
+                  </span>
+                </td>
+
+                @for (
+                  component of book.components;
+                  track component.componentId
+                ) {
+                  <td class="score-column">
+                    <div class="score-field">
+                      <input
+                        class="score-input"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        maxlength="8"
+                        pattern="[0-9.,]*"
+                        [attr.aria-label]="
+                          component.componentName
+                          + ' của '
+                          + student.fullName
+                        "
+                        [disabled]="
+                          book.status === 'Submitted'
+                          || book.status === 'Published'
+                          || book.status === 'Locked'
+                        "
+                        [(ngModel)]="
+                          student.scores[component.componentId]
+                        "
+                        (keydown)="blockInvalidScoreKey($event)"
+                        (beforeinput)="
+                          blockInvalidScoreBeforeInput($event)
+                        "
+                        (paste)="handleScorePaste($event)"
+                        (drop)="blockScoreDrop($event)"
+                        (ngModelChange)="
+                          trackScoreInput(
+                            student,
+                            component.componentId,
+                            $event
+                          )
+                        "
+                        (blur)="
+                          normalizeScore(
+                            student,
+                            component.componentId,
+                            component.maxScore
+                          )
+                        ">
+
+                      @if (
+                        student.errors?.[component.componentId]
+                      ) {
+                        <small class="field-message field-message--error">
+                          {{
+                            student.errors?.[
+                              component.componentId
+                            ]
+                          }}
+                        </small>
+                      }
+
+                      @if (
+                        !student.errors?.[component.componentId]
+                        && student.notes?.[component.componentId]
+                      ) {
+                        <small class="field-message field-message--note">
+                          {{
+                            student.notes?.[
+                              component.componentId
+                            ]
+                          }}
+                        </small>
+                      }
+                    </div>
+                  </td>
+                }
+
+                <td class="final-score-column">
+                  <strong class="final-score-value">
+                    {{ student.finalScore | number:'1.2-2' }}
+                  </strong>
+                </td>
+
+                <td class="letter-column">
+                  <span class="letter-badge">
+                    {{ student.letterGrade }}
+                  </span>
+                </td>
+
+                <td class="result-column">
+                  <span
+                    class="result-badge"
+                    [class.result-badge--passed]="student.passed"
+                    [class.result-badge--failed]="!student.passed">
+                    {{ student.passed ? 'Đạt' : 'Không đạt' }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (importModal() && importPreview(); as preview) {
+    <div class="modal-backdrop">
+      <section class="import-modal">
+        <header class="import-modal__header">
+          <div>
+            <h3>Xem trước import điểm</h3>
+            <p>
+              {{ preview.validRows }} hợp lệ ·
+              {{ preview.invalidRows }} lỗi
+            </p>
+          </div>
+
+          <button
+            type="button"
+            class="modal-close"
+            aria-label="Đóng"
+            (click)="importModal.set(false)">
+            ×
+          </button>
+        </header>
+
+        <div class="import-modal__body">
+          <div class="gradebook-table-wrapper">
+            <table class="gradebook-table">
+              <thead>
+                <tr>
+                  <th>Dòng</th>
+                  <th>Mã SV</th>
+                  <th>Họ tên</th>
+                  <th>Kết quả</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                @for (
+                  row of preview.rows;
+                  track row.rowNumber
+                ) {
+                  <tr>
+                    <td>{{ row.rowNumber }}</td>
+                    <td>{{ row.data['studentCode'] }}</td>
+                    <td>{{ row.data['fullName'] }}</td>
+                    <td>
+                      {{
+                        row.valid
+                          ? 'Hợp lệ'
+                          : row.errors.join('; ')
+                      }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer class="import-modal__footer">
+          <button
+            class="action-button action-button--secondary"
+            type="button"
+            (click)="importModal.set(false)">
+            Đóng
+          </button>
+
+          <button
+            class="action-button action-button--primary"
+            type="button"
+            [disabled]="preview.invalidRows > 0"
+            (click)="commitImport()">
+            Xác nhận import
+          </button>
+        </footer>
+      </section>
+    </div>
+  }
+</section>

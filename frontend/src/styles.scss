@@ -1,4 +1,4 @@
-@import '@fontsource/inter/300.css';
+﻿@import '@fontsource/inter/300.css';
 @import '@fontsource/inter/400.css';
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
@@ -15,7 +15,7 @@
 @media print{.sidebar,.topbar,.page-header .button-group,.page-header button{display:none!important}.workspace{margin-left:0!important}.content{padding:0}.panel{break-inside:avoid;box-shadow:none}}
 
 /* ========================================================================== */
-/* Portal UI refresh – horizontal education portal layout                     */
+/* Portal UI refresh â€“ horizontal education portal layout                     */
 /* ========================================================================== */
 :root{
   --portal-blue:#0b6fc2;
@@ -1321,3 +1321,38 @@ body.dark-theme .floating-launcher-button[aria-expanded='true'] {
     display: none !important;
   }
 }
+
+/* EDU_FONT_PATCH_START */
+:root {
+  --edu-font-family:
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--edu-font-family) !important;
+}
+
+html,
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: inherit;
+}
+/* EDU_FONT_PATCH_END */
+
