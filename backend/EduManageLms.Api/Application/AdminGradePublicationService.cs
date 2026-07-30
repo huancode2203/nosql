@@ -200,37 +200,48 @@ public sealed class AdminGradePublicationService(MongoContext db)
                     student));
         }
 
-        if (writes.Count > 0)
-        {
-            await db.Students.BulkWriteAsync(
-                writes,
-                new BulkWriteOptions { IsOrdered = false },
-                ct);
-        }
-
         var previousStatus = section.GradeStatus;
         section.GradeStatus = "Draft";
         section.UpdatedAt = now;
 
-        await db.ClassSections.ReplaceOneAsync(
-            x => x.Id == section.Id,
-            section,
-            cancellationToken: ct);
-
-        await db.AuditLogs.InsertOneAsync(
-            new AuditLog
+        await ExecuteWriteTransactionAsync(
+            async session =>
             {
-                UserId = adminUserId,
-                Role = "Admin",
-                Action = "GRADE_RETURN",
-                Entity = "ClassSection",
-                EntityId = section.Id,
-                Before = new { GradeStatus = previousStatus },
-                After = new { GradeStatus = section.GradeStatus },
-                Note = reason,
-                Result = "Success"
+                if (writes.Count > 0)
+                {
+                    await db.Students.BulkWriteAsync(
+                        session,
+                        writes,
+                        new BulkWriteOptions { IsOrdered = false },
+                        ct);
+                }
+
+                var sectionResult = await db.ClassSections.ReplaceOneAsync(
+                    session,
+                    x => x.Id == section.Id && x.GradeStatus == "Submitted",
+                    section,
+                    cancellationToken: ct);
+                if (sectionResult.ModifiedCount != 1)
+                    throw new ConflictException(
+                        "Trạng thái bảng điểm đã thay đổi. Vui lòng tải lại.");
+
+                await db.AuditLogs.InsertOneAsync(
+                    session,
+                    new AuditLog
+                    {
+                        UserId = adminUserId,
+                        Role = "Admin",
+                        Action = "GRADE_RETURN",
+                        Entity = "ClassSection",
+                        EntityId = section.Id,
+                        Before = new { GradeStatus = previousStatus },
+                        After = new { GradeStatus = section.GradeStatus },
+                        Note = reason,
+                        Result = "Success"
+                    },
+                    cancellationToken: ct);
             },
-            cancellationToken: ct);
+            ct);
     }
 
     public async Task PublishAsync(
@@ -302,41 +313,149 @@ public sealed class AdminGradePublicationService(MongoContext db)
                     student));
         }
 
-        if (writes.Count > 0)
-        {
-            await db.Students.BulkWriteAsync(
-                writes,
-                new BulkWriteOptions { IsOrdered = false },
-                ct);
-        }
-
         var previousStatus = section.GradeStatus;
         section.GradeStatus = "Published";
         section.UpdatedAt = now;
 
-        await db.ClassSections.ReplaceOneAsync(
-            x => x.Id == section.Id,
-            section,
-            cancellationToken: ct);
-
-        await db.AuditLogs.InsertOneAsync(
-            new AuditLog
+        await ExecuteWriteTransactionAsync(
+            async session =>
             {
-                UserId = adminUserId,
-                Role = "Admin",
-                Action = "GRADE_PUBLISH",
-                Entity = "ClassSection",
-                EntityId = section.Id,
-                Before = new { GradeStatus = previousStatus },
-                After = new
+                if (writes.Count > 0)
                 {
-                    GradeStatus = section.GradeStatus,
-                    PublishedAt = now
-                },
-                Note = reason,
-                Result = "Success"
+                    await db.Students.BulkWriteAsync(
+                        session,
+                        writes,
+                        new BulkWriteOptions { IsOrdered = false },
+                        ct);
+                }
+
+                var sectionResult = await db.ClassSections.ReplaceOneAsync(
+                    session,
+                    x => x.Id == section.Id && x.GradeStatus == "Submitted",
+                    section,
+                    cancellationToken: ct);
+                if (sectionResult.ModifiedCount != 1)
+                    throw new ConflictException(
+                        "Trạng thái bảng điểm đã thay đổi. Vui lòng tải lại.");
+
+                await db.AuditLogs.InsertOneAsync(
+                    session,
+                    new AuditLog
+                    {
+                        UserId = adminUserId,
+                        Role = "Admin",
+                        Action = "GRADE_PUBLISH",
+                        Entity = "ClassSection",
+                        EntityId = section.Id,
+                        Before = new { GradeStatus = previousStatus },
+                        After = new
+                        {
+                            GradeStatus = section.GradeStatus,
+                            PublishedAt = now
+                        },
+                        Note = reason,
+                        Result = "Success"
+                    },
+                    cancellationToken: ct);
             },
+            ct);
+    }
+
+    public async Task LockAsync(
+        string sectionId,
+        string adminUserId,
+        string reason,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new AppException("Phải nhập lý do khóa bảng điểm.");
+
+        var section = await db.ClassSections
+            .Find(x => x.Id == sectionId && !x.IsDeleted)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Không tìm thấy lớp học phần.");
+
+        if (section.GradeStatus != "Published")
+            throw new AppException("Chỉ được khóa bảng điểm đã công bố.");
+
+        var students = await LoadStudentsAsync(section, ct);
+        var now = DateTime.UtcNow;
+        var writes = new List<WriteModel<Student>>();
+
+        foreach (var student in students)
+        {
+            var course = FindCourseRecord(student, section.Id)
+                ?? throw new AppException(
+                    $"Sinh viên {student.StudentCode} thiếu hồ sơ môn học.");
+            course.ScoreStatus = "Locked";
+            course.Version++;
+            student.UpdatedAt = now;
+            writes.Add(
+                new ReplaceOneModel<Student>(
+                    Builders<Student>.Filter.Eq(x => x.Id, student.Id),
+                    student));
+        }
+
+        section.GradeStatus = "Locked";
+        section.UpdatedAt = now;
+
+        await ExecuteWriteTransactionAsync(
+            async session =>
+            {
+                if (writes.Count > 0)
+                {
+                    await db.Students.BulkWriteAsync(
+                        session,
+                        writes,
+                        new BulkWriteOptions { IsOrdered = false },
+                        ct);
+                }
+
+                var sectionResult = await db.ClassSections.ReplaceOneAsync(
+                    session,
+                    x => x.Id == section.Id && x.GradeStatus == "Published",
+                    section,
+                    cancellationToken: ct);
+                if (sectionResult.ModifiedCount != 1)
+                    throw new ConflictException(
+                        "Trạng thái bảng điểm đã thay đổi. Vui lòng tải lại.");
+
+                await db.AuditLogs.InsertOneAsync(
+                    session,
+                    new AuditLog
+                    {
+                        UserId = adminUserId,
+                        Role = "Admin",
+                        Action = "GRADE_LOCK",
+                        Entity = "ClassSection",
+                        EntityId = section.Id,
+                        Before = new { GradeStatus = "Published" },
+                        After = new { GradeStatus = "Locked" },
+                        Note = reason,
+                        Result = "Success"
+                    },
+                    cancellationToken: ct);
+            },
+            ct);
+    }
+
+    private async Task ExecuteWriteTransactionAsync(
+        Func<IClientSessionHandle, Task> operation,
+        CancellationToken ct)
+    {
+        using var session = await db.Client.StartSessionAsync(
             cancellationToken: ct);
+        await session.WithTransactionAsync(
+            async (current, _) =>
+            {
+                await operation(current);
+                return true;
+            },
+            new TransactionOptions(
+                ReadConcern.Snapshot,
+                ReadPreference.Primary,
+                WriteConcern.WMajority),
+            ct);
     }
 
     private async Task<AdminGradebookDetailDto> BuildDetailAsync(

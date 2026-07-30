@@ -7,7 +7,14 @@ public sealed record LoginRequest(string Identifier, string Password, bool Remem
 public sealed record RefreshRequest(string RefreshToken);
 public sealed record ForgotPasswordRequest(string Email);
 public sealed record ResetPasswordRequest(string Email, string Code, string NewPassword);
-public sealed record LoginUserDto(string Id, string Username, string Email, string FullName, string Role, string? AvatarUrl);
+public sealed record LoginUserDto(
+    string Id,
+    string Username,
+    string Email,
+    string FullName,
+    string Role,
+    string? AvatarUrl,
+    IReadOnlyCollection<string> Permissions);
 public sealed record LoginResponse(string AccessToken, string RefreshToken, DateTime ExpiresAt, LoginUserDto User);
 public sealed record DashboardCardDto(string Label, object Value, string Icon, string? Trend, string Tone);
 public sealed record ChartItemDto(string Label, double Value);
@@ -145,13 +152,20 @@ public interface IGradebookService
 
 public interface IAdminResourceService
 {
-    Task<PagedResult<Dictionary<string, object?>>> ListAsync(string resource, string? search, int page, int size, CancellationToken ct);
+    Task<PagedResult<Dictionary<string, object?>>> ListAsync(string resource, string? search, bool deletedOnly, int page, int size, CancellationToken ct);
     Task<Dictionary<string, object?>> GetAsync(string resource, string id, CancellationToken ct);
-    Task<Dictionary<string, object?>> CreateAsync(string resource, Dictionary<string, object?> body, CancellationToken ct);
-    Task<Dictionary<string, object?>> UpdateAsync(string resource, string id, Dictionary<string, object?> body, CancellationToken ct);
-    Task DeleteAsync(string resource, string id, CancellationToken ct);
-    Task RestoreAsync(string resource, string id, CancellationToken ct);
+    Task<Dictionary<string, object?>> CreateAsync(string resource, Dictionary<string, object?> body, AdminActor actor, CancellationToken ct);
+    Task<Dictionary<string, object?>> UpdateAsync(string resource, string id, Dictionary<string, object?> body, AdminActor actor, CancellationToken ct);
+    Task DeleteAsync(string resource, string id, AdminActor actor, CancellationToken ct);
+    Task RestoreAsync(string resource, string id, AdminActor actor, CancellationToken ct);
 }
+
+public sealed record AdminActor(
+    string UserId,
+    string UserName,
+    string Role,
+    string IpAddress,
+    string UserAgent);
 
 public interface IBackupService
 {

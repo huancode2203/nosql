@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageHeaderComponent } from '../../shared/page-header.component';
+import { AuthService } from '../../core/services/auth.service';
 
 interface PagedResult<T> {
   items: T[];
@@ -127,7 +128,8 @@ export class GradebookReviewComponent implements OnInit {
 
   constructor(
     private readonly api: ApiService,
-    private readonly toast: ToastService
+    private readonly toast: ToastService,
+    readonly auth: AuthService
   ) {}
 
   ngOnInit() {
@@ -281,6 +283,47 @@ export class GradebookReviewComponent implements OnInit {
         this.toast.show(
           error.error?.message
           || 'Không thể trả lại bảng điểm.',
+          'error'
+        );
+      }
+    });
+  }
+
+  lock() {
+    const current = this.detail();
+    if (!current || current.status !== 'Published') {
+      return;
+    }
+
+    const reason = window.prompt(
+      'Nhập lý do khóa bảng điểm:',
+      'Đã hết thời hạn điều chỉnh điểm.'
+    );
+    if (!reason?.trim()) {
+      return;
+    }
+    if (!window.confirm(
+      `Khóa bảng điểm ${current.classSectionCode}? `
+      + 'Giảng viên sẽ không thể chỉnh sửa cho đến khi có yêu cầu mở lại.'
+    )) {
+      return;
+    }
+
+    this.working.set(true);
+    this.api.post(
+      `/admin/gradebooks/${current.classSectionId}/lock`,
+      { reason: reason.trim() }
+    ).subscribe({
+      next: () => {
+        this.toast.show('Khóa bảng điểm thành công.', 'success');
+        this.working.set(false);
+        this.detail.set(null);
+        this.load();
+      },
+      error: error => {
+        this.working.set(false);
+        this.toast.show(
+          error.error?.message || 'Không thể khóa bảng điểm.',
           'error'
         );
       }

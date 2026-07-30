@@ -12,6 +12,7 @@ interface QuickAction {
   icon: string;
   route: string;
   tone?: string;
+  permission?: string;
 }
 
 @Component({
@@ -20,7 +21,7 @@ interface QuickAction {
   templateUrl: './dashboard.component.html'
 })
 export class DashboardComponent implements OnInit {
-  private readonly api = inject(ApiService);
+  readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
 
   readonly user = this.auth.user;
@@ -41,16 +42,19 @@ export class DashboardComponent implements OnInit {
 
   readonly quickActions = computed<QuickAction[]>(() => {
     if (this.isAdmin()) {
-      return [
-        { label: 'Tài khoản', icon: 'group', route: '/admin/users' },
-        { label: 'Sinh viên', icon: 'school', route: '/admin/students' },
-        { label: 'Giảng viên', icon: 'badge', route: '/admin/lecturers' },
-        { label: 'Môn học', icon: 'menu_book', route: '/admin/courses' },
-        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections' },
-        { label: 'Cấu trúc điểm', icon: 'rule', route: '/admin/grading-schemes' },
-        { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports' },
-        { label: 'Sao lưu', icon: 'backup', route: '/admin/backups' }
+      const actions: QuickAction[] = [
+        { label: 'Tài khoản', icon: 'group', route: '/admin/users', permission: 'admin.resources.read' },
+        { label: 'Sinh viên', icon: 'school', route: '/admin/students', permission: 'admin.resources.read' },
+        { label: 'Giảng viên', icon: 'badge', route: '/admin/lecturers', permission: 'admin.resources.read' },
+        { label: 'Môn học', icon: 'menu_book', route: '/admin/courses', permission: 'admin.resources.read' },
+        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections', permission: 'admin.resources.read' },
+        { label: 'Cấu trúc điểm', icon: 'rule', route: '/admin/grading-schemes', permission: 'admin.settings.manage' },
+        { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports', permission: 'admin.reports.read' },
+        { label: 'Sao lưu', icon: 'backup', route: '/admin/backups', permission: 'admin.backups.read' }
       ];
+      return actions.filter(action =>
+        !action.permission || this.auth.hasPermission(action.permission)
+      );
     }
     if (this.isLecturer()) {
       return [

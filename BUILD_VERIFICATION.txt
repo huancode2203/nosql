@@ -1,5 +1,9 @@
-Frontend final build: OK
+Frontend final build: OK (Admin completion v2.1)
 TypeScript type-check: OK
 MongoDB scripts syntax check: OK
 C# delimiter/static structure check: OK
-Backend runtime build: NOT RUN (dotnet SDK unavailable in generation environment)
+Admin route/permission uniqueness scan: OK
+Admin permission-to-dependent-endpoint scan: OK
+Legacy MongoDB document compatibility test: added
+Backend runtime build and xUnit: enforced in the API Docker build
+Backend runtime execution: delegated to installer because Docker is unavailable in the generation environment

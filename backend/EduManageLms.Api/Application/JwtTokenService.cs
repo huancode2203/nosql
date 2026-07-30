@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using EduManageLms.Api.Domain;
+using EduManageLms.Api.Common;
 using EduManageLms.Api.Infrastructure;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -26,6 +27,14 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
         };
         if (user.StudentCode is not null) claims.Add(new Claim("studentCode", user.StudentCode));
         if (user.LecturerCode is not null) claims.Add(new Claim("lecturerCode", user.LecturerCode));
+        var permissions = user.PermissionsConfigured
+            ? user.Permissions
+            : AppPermissions.DefaultsForRole(user.Role);
+        claims.AddRange(
+            permissions
+                .Where(AppPermissions.All.Contains)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(permission => new Claim("permission", permission)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Key));
         var token = new JwtSecurityToken(

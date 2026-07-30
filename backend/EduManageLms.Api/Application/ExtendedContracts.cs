@@ -166,6 +166,7 @@ public sealed record UserProfileDto(
     string Role,
     string Status,
     string? AvatarUrl,
+    string? SecondaryEmail,
     string Phone,
     string Address,
     DateTime? DateOfBirth,
@@ -182,9 +183,46 @@ public sealed record UserProfileDto(
     string JobTitle,
     string Department);
 
-public sealed record UpdateProfileRequest(string Phone, string Address, DateTime? DateOfBirth, string? AvatarUrl, string? SecondaryEmail);
+public sealed record UpdateProfileRequest(
+    string Phone,
+    string Address,
+    DateTime? DateOfBirth,
+    string? Gender,
+    string? SecondaryEmail);
+
+public sealed record AdminAvatarDto(string UserId, string? AvatarUrl);
+
+public interface IAdminAvatarService
+{
+    Task<AdminAvatarDto> UploadAsync(
+        string userId,
+        IFormFile file,
+        AdminActor actor,
+        CancellationToken ct);
+
+    Task<AdminAvatarDto> DeleteAsync(
+        string userId,
+        AdminActor actor,
+        CancellationToken ct);
+}
 
 public sealed record CourseDesignDto(string CourseId, string CourseCode, string CourseName, IReadOnlyCollection<CloDefinition> Clos, IReadOnlyCollection<GradingSchemeVersion> GradingSchemes);
+public sealed record AdminCourseOptionDto(
+    string Id,
+    string CourseCode,
+    string CourseName);
+public sealed record AdminLookupOptionDto(
+    string Id,
+    string Code,
+    string Name);
+public sealed record AdminReportOptionsDto(
+    IReadOnlyCollection<AdminLookupOptionDto> AcademicYears,
+    IReadOnlyCollection<AdminLookupOptionDto> Semesters,
+    IReadOnlyCollection<AdminLookupOptionDto> Faculties,
+    IReadOnlyCollection<AdminLookupOptionDto> Programs);
+public sealed record AdminNotificationOptionsDto(
+    IReadOnlyCollection<AdminLookupOptionDto> Faculties,
+    IReadOnlyCollection<AdminLookupOptionDto> ClassSections);
 public sealed record SaveCourseDesignRequest(IReadOnlyCollection<CloDefinition> Clos, GradingSchemeVersion Scheme);
 
 public sealed record AdminReportDto(
@@ -200,10 +238,36 @@ public sealed record ImportPreviewDto(int TotalRows, int ValidRows, int InvalidR
 
 public interface IAdminAcademicService
 {
+    Task<IReadOnlyCollection<AdminCourseOptionDto>> GetGradingCoursesAsync(
+        CancellationToken ct);
+    Task<AdminReportOptionsDto> GetReportOptionsAsync(
+        CancellationToken ct);
+    Task<AdminNotificationOptionsDto> GetNotificationOptionsAsync(
+        CancellationToken ct);
     Task<CourseDesignDto> GetCourseDesignAsync(string courseId, CancellationToken ct);
     Task<CourseDesignDto> SaveCourseDesignAsync(string courseId, SaveCourseDesignRequest request, string userId, CancellationToken ct);
-    Task<PagedResult<Dictionary<string, object?>>> GetAuditLogsAsync(string? search, int page, int size, CancellationToken ct);
-    Task<AdminReportDto> GetReportsAsync(CancellationToken ct);
+    Task<PagedResult<Dictionary<string, object?>>> GetAuditLogsAsync(
+        string? search,
+        string? role,
+        string? action,
+        string? result,
+        DateTime? from,
+        DateTime? to,
+        int page,
+        int size,
+        CancellationToken ct);
+    Task<AdminReportDto> GetReportsAsync(
+        string? academicYearId,
+        string? semesterId,
+        string? facultyId,
+        string? programId,
+        CancellationToken ct);
+    Task<byte[]> ExportReportPdfAsync(
+        string? academicYearId,
+        string? semesterId,
+        string? facultyId,
+        string? programId,
+        CancellationToken ct);
     Task<Dictionary<string, object?>> ReviewReopenRequestAsync(string id, bool approve, string note, string userId, CancellationToken ct);
 }
 
@@ -297,4 +361,10 @@ public interface IImportExportService
 {
     Task<byte[]> ExportResourceAsync(string resource, CancellationToken ct);
     Task<ImportPreviewDto> ImportStudentsAsync(IFormFile file, bool commit, CancellationToken ct);
+    Task<ImportPreviewDto> ImportResourceAsync(
+        string resource,
+        IFormFile file,
+        bool commit,
+        AdminActor actor,
+        CancellationToken ct);
 }

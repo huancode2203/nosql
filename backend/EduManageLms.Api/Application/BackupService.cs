@@ -39,6 +39,7 @@ public sealed class BackupService(MongoContext db, IOptions<BackupOptions> optio
         history.UpdatedAt = DateTime.UtcNow;
         await db.BackupHistories.ReplaceOneAsync(x => x.Id == history.Id, history, cancellationToken: ct);
         if (history.Status == "Failed") throw new AppException("Backup thất bại: " + history.Error, 500);
+        await WriteAuditAsync(userId, "CreateBackup", history.Id, ct);
         return Map(history).ToDictionary(x => x.Key, x => x.Value!);
     }
 
@@ -101,6 +102,7 @@ public sealed class BackupService(MongoContext db, IOptions<BackupOptions> optio
             SizeBytes = Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length)
         };
         await db.BackupHistories.InsertOneAsync(history, cancellationToken: ct);
+        await WriteAuditAsync(userId, "UploadBackup", history.Id, ct);
         return Map(history).ToDictionary(x => x.Key, x => x.Value!);
     }
 

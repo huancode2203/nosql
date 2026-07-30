@@ -7,23 +7,43 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-lms_admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-LmsMongo@123}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-EduManageLms}
+      MONGO_REPLICA_KEY: ${MONGO_REPLICA_KEY:-EduManageLmsReplicaKeyChangeInProduction2026}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        MONGO_KEY_B64="$$(printf '%s' "$$MONGO_REPLICA_KEY" | base64 | tr -d '\r\n')"
+        if [ "$${#MONGO_KEY_B64}" -lt 6 ]; then
+          echo "MongoDB replica key is too short after encoding." >&2
+          exit 1
+        fi
+        printf '%s' "$$MONGO_KEY_B64" > /tmp/mongodb-keyfile
+        chmod 400 /tmp/mongodb-keyfile
+        chown 999:999 /tmp/mongodb-keyfile
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongodb-keyfile --bind_ip_all
     ports: ["27017:27017"]
     volumes:
       - mongo_data:/data/db
       - ./database/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok", "mongodb://localhost:27017/admin"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"try { const hello = db.adminCommand({hello:1}); if (hello.isWritablePrimary === true) { quit(0); } rs.status(); quit(1); } catch (e) { if (e.code === 94 || e.codeName === 'NotYetInitialized') { try { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}); } catch (initError) { print(initError); } } quit(1); }\" \"mongodb://localhost:27017/admin?directConnection=true\""
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
   api:
-    build: ./backend/EduManageLms.Api
+    build:
+      context: ./backend
+      dockerfile: EduManageLms.Api/Dockerfile
     container_name: edumanage-api
     restart: unless-stopped
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      MongoDb__ConnectionString: mongodb://${MONGO_ROOT_USERNAME:-lms_admin}:${MONGO_ROOT_PASSWORD:-LmsMongo@123}@mongo:27017/?authSource=admin
+      MongoDb__ConnectionString: mongodb://${MONGO_ROOT_USERNAME:-lms_admin}:${MONGO_ROOT_PASSWORD:-LmsMongo@123}@mongo:27017/?authSource=admin&replicaSet=rs0
       MongoDb__DatabaseName: ${MONGO_DATABASE:-EduManageLms}
       Jwt__Key: ${JWT_KEY:-DEVELOPMENT_ONLY_CHANGE_TO_AT_LEAST_32_CHARACTERS}
       Jwt__Issuer: ${JWT_ISSUER:-EduManageLms}

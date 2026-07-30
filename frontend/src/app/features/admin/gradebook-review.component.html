@@ -413,6 +413,12 @@
             [disabled]="
               working()
               || selected.status !== 'Submitted'
+              || !auth.hasPermission('admin.grades.review')
+            "
+            [title]="
+              auth.hasPermission('admin.grades.review')
+                ? 'Trả bảng điểm cho giảng viên chỉnh sửa'
+                : 'Tài khoản chưa có quyền xem và trả lại bảng điểm'
             "
             (click)="returnToLecturer()">
             Trả lại giảng viên
@@ -421,14 +427,48 @@
           <button
             class="review-button review-button--primary"
             type="button"
-            [disabled]="working() || !selected.readyToPublish"
+            [disabled]="
+              working()
+              || !selected.readyToPublish
+              || selected.status !== 'Submitted'
+              || !auth.hasPermission('admin.grades.publish')
+            "
+            [title]="
+              !auth.hasPermission('admin.grades.publish')
+                ? 'Tài khoản chưa có quyền công bố bảng điểm'
+                : !selected.readyToPublish
+                  ? 'Bảng điểm còn lỗi hoặc điểm cần xác nhận'
+                  : selected.status !== 'Submitted'
+                    ? 'Chỉ duyệt bảng điểm đang ở trạng thái Chờ duyệt'
+                    : 'Duyệt và công bố kết quả cho sinh viên'
+            "
             (click)="publish()">
+            <span class="material-symbols-outlined">verified</span>
             {{
               working()
                 ? 'Đang xử lý...'
-                : 'Công bố bảng điểm'
+                : 'Duyệt và công bố'
             }}
           </button>
+
+          @if (selected.status === 'Published') {
+            <button
+              class="review-button review-button--primary"
+              type="button"
+              [disabled]="
+                working()
+                || !auth.hasPermission('admin.grades.lock')
+              "
+              [title]="
+                auth.hasPermission('admin.grades.lock')
+                  ? 'Khóa bảng điểm đã công bố'
+                  : 'Tài khoản chưa có quyền khóa bảng điểm'
+              "
+              (click)="lock()">
+              <span class="material-symbols-outlined">lock</span>
+              Khóa bảng điểm
+            </button>
+          }
         </footer>
       </section>
     </div>

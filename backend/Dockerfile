@@ -8,9 +8,9 @@ RUN dotnet restore EduManageLms.Api/EduManageLms.Api.csproj
 
 COPY EduManageLms.Api/ EduManageLms.Api/
 
-RUN dotnet publish EduManageLms.Api/EduManageLms.Api.csproj \
-    -c Release \
-    -o /app/publish \
+RUN dotnet publish EduManageLms.Api/EduManageLms.Api.csproj `
+    -c Release `
+    -o /app/publish `
     --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0

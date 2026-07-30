@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using EduManageLms.Api.Application;
 using EduManageLms.Api.Hubs;
 using EduManageLms.Api.Infrastructure;
@@ -13,15 +13,15 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Conventions;
 using Serilog;
 
-var conventionPack = new ConventionPack { new CamelCaseElementNameConvention() };
-ConventionRegistry.Register("camelCase", conventionPack, _ => true);
+MongoConventionBootstrap.EnsureRegistered();
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((ctx, cfg) => cfg.ReadFrom.Configuration(ctx.Configuration));
 builder.Services.Configure<MongoOptions>(builder.Configuration.GetSection(MongoOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection(BackupOptions.SectionName));
-builder.Services.Configure<FormOptions>(x => x.MultipartBodyLengthLimit = 50 * 1024 * 1024);
+builder.Services.Configure<FormOptions>(x => x.MultipartBodyLengthLimit = 500L * 1024 * 1024);
 
 builder.Services.AddSingleton<MongoContext>();
 builder.Services.AddSingleton<IndexInitializer>();
@@ -42,6 +42,7 @@ builder.Services.AddScoped<ILecturerPortalService, LecturerPortalService>();
 builder.Services.AddScoped<IStudentPortalService, StudentPortalService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IImportExportService, ImportExportService>();
+builder.Services.AddScoped<IAdminAvatarService, AdminAvatarService>();
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>

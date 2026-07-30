@@ -344,8 +344,8 @@
   max-height: calc(100vh - 48px);
   overflow: hidden;
   border-radius: 18px;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   box-shadow: 0 28px 80px rgba(4, 27, 46, 0.34);
 }
@@ -353,11 +353,13 @@
 .detail-dialog--loading {
   width: min(420px, 100%);
   min-height: 150px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   color: #49677e;
 }
 
 .detail-header {
+  flex: 0 0 auto;
   padding: 20px 23px;
   border-bottom: 1px solid #e2eaf0;
   display: flex;
@@ -398,6 +400,7 @@
 }
 
 .detail-summary {
+  flex: 0 0 auto;
   padding: 15px 22px;
   display: grid;
   grid-template-columns: repeat(4, minmax(100px, 1fr));
@@ -436,6 +439,7 @@
 }
 
 .detail-alert {
+  flex: 0 0 auto;
   margin: 14px 20px 0;
   padding: 12px 14px;
   border: 1px solid #efd59a;
@@ -452,7 +456,10 @@
 }
 
 .detail-table-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 15px 20px 20px;
+  overscroll-behavior: contain;
 }
 
 .detail-table td {
@@ -493,12 +500,18 @@
 }
 
 .detail-actions {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
   padding: 15px 20px;
   border-top: 1px solid #e2eaf0;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 9px;
   background: #f8fbfd;
+  box-shadow: 0 -8px 24px rgba(16, 47, 73, 0.06);
 }
 
 @media (max-width: 1000px) {

@@ -8,6 +8,17 @@ import { ApiResponse } from '../models/api.models';
 export class ApiService {
   constructor(private http: HttpClient) {}
 
+  assetUrl(path?: string): string {
+    if (!path || /^https?:\/\//i.test(path)) {
+      return path || '';
+    }
+    if (/^https?:\/\//i.test(environment.apiUrl)) {
+      const normalized = path.startsWith('/') ? path : `/${path}`;
+      return `${new URL(environment.apiUrl).origin}${normalized}`;
+    }
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+
   get<T>(path: string, params?: Record<string, string | number | boolean>): Observable<ApiResponse<T>> {
     let query = new HttpParams();
     Object.entries(params || {}).forEach(([key, value]) => (query = query.set(key, String(value))));
@@ -26,8 +37,10 @@ export class ApiService {
     return this.http.delete<ApiResponse<T>>(`${environment.apiUrl}${path}`);
   }
 
-  getBlob(path: string): Observable<Blob> {
-    return this.http.get(`${environment.apiUrl}${path}`, { responseType: 'blob' });
+  getBlob(path: string, params?: Record<string, string | number | boolean>): Observable<Blob> {
+    let query = new HttpParams();
+    Object.entries(params || {}).forEach(([key, value]) => (query = query.set(key, String(value))));
+    return this.http.get(`${environment.apiUrl}${path}`, { params: query, responseType: 'blob' });
   }
 
   postForm<T>(path: string, form: FormData, params?: Record<string, string | number | boolean>): Observable<ApiResponse<T>> {

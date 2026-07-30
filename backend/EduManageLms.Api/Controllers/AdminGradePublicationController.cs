@@ -7,6 +7,7 @@ namespace EduManageLms.Api.Controllers;
 
 public sealed record PublishGradesRequest(string Reason);
 public sealed record ReturnGradebookRequest(string Reason);
+public sealed record LockGradebookRequest(string Reason);
 
 [ApiController]
 [Route("api/v1/admin/gradebooks")]
@@ -15,6 +16,7 @@ public sealed class AdminGradePublicationController(
     AdminGradePublicationService service) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(AppPermissions.GradesReview)]
     public async Task<ActionResult<ApiResponse<PagedResult<AdminGradebookSummaryDto>>>> List(
         [FromQuery] string? status = "Submitted",
         [FromQuery] string? search = null,
@@ -34,6 +36,7 @@ public sealed class AdminGradePublicationController(
     }
 
     [HttpGet("{sectionId}")]
+    [RequirePermission(AppPermissions.GradesReview)]
     public async Task<ActionResult<ApiResponse<AdminGradebookDetailDto>>> Get(
         string sectionId,
         CancellationToken ct)
@@ -45,6 +48,7 @@ public sealed class AdminGradePublicationController(
     }
 
     [HttpPost("{sectionId}/return")]
+    [RequirePermission(AppPermissions.GradesReview)]
     public async Task<ActionResult<ApiResponse<object>>> ReturnToLecturer(
         string sectionId,
         ReturnGradebookRequest request,
@@ -67,6 +71,7 @@ public sealed class AdminGradePublicationController(
     }
 
     [HttpPost("{sectionId}/publish")]
+    [RequirePermission(AppPermissions.GradesPublish)]
     public async Task<ActionResult<ApiResponse<object>>> Publish(
         string sectionId,
         PublishGradesRequest request,
@@ -86,5 +91,28 @@ public sealed class AdminGradePublicationController(
                     status = "Published"
                 },
                 "Công bố điểm thành công."));
+    }
+
+    [HttpPost("{sectionId}/lock")]
+    [RequirePermission(AppPermissions.GradesLock)]
+    public async Task<ActionResult<ApiResponse<object>>> Lock(
+        string sectionId,
+        LockGradebookRequest request,
+        CancellationToken ct)
+    {
+        await service.LockAsync(
+            sectionId,
+            User.UserId(),
+            request.Reason,
+            ct);
+
+        return Ok(
+            ApiResponse<object>.Ok(
+                new
+                {
+                    sectionId,
+                    status = "Locked"
+                },
+                "Khóa bảng điểm thành công."));
     }
 }

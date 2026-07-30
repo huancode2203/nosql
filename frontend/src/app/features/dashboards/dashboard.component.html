@@ -14,7 +14,7 @@
     <article class="student-info-card panel">
       <div class="profile-avatar-block">
         @if (profile()?.avatarUrl) {
-          <img [src]="profile()?.avatarUrl" alt="Ảnh đại diện" />
+          <img [src]="api.assetUrl(profile()?.avatarUrl)" alt="Ảnh đại diện" />
         } @else {
           <span>{{ profile()?.fullName?.charAt(0) || 'U' }}</span>
         }

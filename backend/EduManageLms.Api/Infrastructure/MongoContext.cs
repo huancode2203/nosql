@@ -6,6 +6,7 @@ namespace EduManageLms.Api.Infrastructure;
 
 public sealed class MongoContext
 {
+    public IMongoClient Client { get; }
     public IMongoDatabase Database { get; }
     public MongoOptions Options { get; }
 
@@ -14,7 +15,8 @@ public sealed class MongoContext
         Options = options.Value;
         var settings = MongoClientSettings.FromConnectionString(Options.ConnectionString);
         settings.ServerSelectionTimeout = TimeSpan.FromSeconds(8);
-        Database = new MongoClient(settings).GetDatabase(Options.DatabaseName);
+        Client = new MongoClient(settings);
+        Database = Client.GetDatabase(Options.DatabaseName);
     }
 
     public IMongoCollection<User> Users => Database.GetCollection<User>("users");

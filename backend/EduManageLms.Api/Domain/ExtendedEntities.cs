@@ -12,6 +12,7 @@ public sealed class Faculty : Document
     public string Status { get; set; } = "Active";
 }
 
+[BsonIgnoreExtraElements]
 public sealed class ProgramCourseItem
 {
     [BsonRepresentation(BsonType.ObjectId)] public string? CourseId { get; set; }
@@ -112,6 +113,7 @@ public sealed class Assignment : Document
     public string Status { get; set; } = "Open";
 }
 
+[BsonIgnoreExtraElements]
 public sealed class SubmissionFile
 {
     public string OriginalName { get; set; } = "";

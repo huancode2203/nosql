@@ -30,6 +30,7 @@ export interface CurrentUser {
   fullName: string;
   role: Role;
   avatarUrl?: string;
+  permissions: string[];
 }
 
 export interface LoginResponse {

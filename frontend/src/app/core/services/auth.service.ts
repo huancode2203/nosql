@@ -68,6 +68,14 @@ export class AuthService {
     return !!user && roles.includes(user.role);
   }
 
+  hasPermission(permission: string): boolean {
+    const user = this.userSignal();
+    return !!user && (
+      user.permissions?.includes('admin.full_access')
+      || user.permissions?.includes(permission)
+    );
+  }
+
   homeFor(role: Role): string {
     return role === 'Admin' ? '/admin/dashboard' : role === 'Lecturer' ? '/lecturer/dashboard' : '/student/dashboard';
   }

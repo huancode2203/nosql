@@ -9,6 +9,7 @@ interface NavItem {
   icon: string;
   route: string;
   description?: string;
+  permission?: string;
 }
 
 interface NotificationItem {
@@ -40,7 +41,7 @@ interface LauncherDragState {
 })
 export class AppLayoutComponent implements OnInit {
   private readonly router = inject(Router);
-  private readonly api = inject(ApiService);
+  readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
 
   readonly launcherOpen = signal(false);
@@ -58,26 +59,29 @@ export class AppLayoutComponent implements OnInit {
   readonly nav = computed<NavItem[]>(() => {
     const role = this.user()?.role;
     if (role === 'Admin') {
-      return [
+      const items: NavItem[] = [
         { label: 'Tổng quan', icon: 'dashboard', route: '/admin/dashboard', description: 'Số liệu toàn hệ thống' },
-        { label: 'Tài khoản', icon: 'group', route: '/admin/users', description: 'Quản lý truy cập' },
-        { label: 'Sinh viên', icon: 'school', route: '/admin/students', description: 'Hồ sơ và học vụ' },
-        { label: 'Giảng viên', icon: 'badge', route: '/admin/lecturers', description: 'Nhân sự giảng dạy' },
-        { label: 'Khoa', icon: 'account_balance', route: '/admin/faculties' },
-        { label: 'Chương trình đào tạo', icon: 'schema', route: '/admin/programs' },
-        { label: 'Năm học', icon: 'date_range', route: '/admin/academic-years' },
-        { label: 'Học kỳ', icon: 'calendar_view_month', route: '/admin/semesters' },
-        { label: 'Môn học', icon: 'menu_book', route: '/admin/courses' },
-        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections' },
-        { label: 'Duyệt bảng điểm', icon: 'fact_check', route: '/admin/gradebooks', description: 'Kiểm tra và công bố điểm' },
-        { label: 'Cấu trúc điểm & CLO', icon: 'rule', route: '/admin/grading-schemes' },
-        { label: 'Thông báo', icon: 'notifications', route: '/admin/notifications' },
-        { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports' },
-        { label: 'Yêu cầu mở điểm', icon: 'lock_open', route: '/admin/grade-reopen-requests' },
-        { label: 'Sao lưu', icon: 'backup', route: '/admin/backups' },
-        { label: 'Nhật ký', icon: 'history', route: '/admin/audit-logs' },
-        { label: 'Cấu hình', icon: 'settings', route: '/admin/settings' }
+        { label: 'Tài khoản', icon: 'group', route: '/admin/users', description: 'Quản lý truy cập', permission: 'admin.resources.read' },
+        { label: 'Sinh viên', icon: 'school', route: '/admin/students', description: 'Hồ sơ và học vụ', permission: 'admin.resources.read' },
+        { label: 'Giảng viên', icon: 'badge', route: '/admin/lecturers', description: 'Nhân sự giảng dạy', permission: 'admin.resources.read' },
+        { label: 'Khoa', icon: 'account_balance', route: '/admin/faculties', permission: 'admin.resources.read' },
+        { label: 'Chương trình đào tạo', icon: 'schema', route: '/admin/programs', permission: 'admin.resources.read' },
+        { label: 'Năm học', icon: 'date_range', route: '/admin/academic-years', permission: 'admin.resources.read' },
+        { label: 'Học kỳ', icon: 'calendar_view_month', route: '/admin/semesters', permission: 'admin.resources.read' },
+        { label: 'Môn học', icon: 'menu_book', route: '/admin/courses', permission: 'admin.resources.read' },
+        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections', permission: 'admin.resources.read' },
+        { label: 'Duyệt bảng điểm', icon: 'fact_check', route: '/admin/gradebooks', description: 'Kiểm tra và công bố điểm', permission: 'admin.grades.review' },
+        { label: 'Cấu trúc điểm & CLO', icon: 'rule', route: '/admin/grading-schemes', permission: 'admin.settings.manage' },
+        { label: 'Thông báo', icon: 'notifications', route: '/admin/notifications', permission: 'admin.notifications.manage' },
+        { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports', permission: 'admin.reports.read' },
+        { label: 'Yêu cầu mở điểm', icon: 'lock_open', route: '/admin/grade-reopen-requests', permission: 'admin.grades.reopen' },
+        { label: 'Sao lưu', icon: 'backup', route: '/admin/backups', permission: 'admin.backups.read' },
+        { label: 'Nhật ký', icon: 'history', route: '/admin/audit-logs', permission: 'admin.audit.read' },
+        { label: 'Cấu hình', icon: 'settings', route: '/admin/settings', permission: 'admin.settings.manage' }
       ];
+      return items.filter(item =>
+        !item.permission || this.auth.hasPermission(item.permission)
+      );
     }
 
     if (role === 'Lecturer') {

@@ -8,7 +8,9 @@ using MongoDB.Driver;
 
 namespace EduManageLms.Api.Application;
 
-public sealed class ImportExportService(MongoContext db) : IImportExportService
+public sealed class ImportExportService(
+    MongoContext db,
+    IAdminResourceService adminResources) : IImportExportService
 {
     public async Task<byte[]> ExportResourceAsync(string resource, CancellationToken ct)
     {
@@ -23,6 +25,9 @@ public sealed class ImportExportService(MongoContext db) : IImportExportService
             "semesters" => "semesters",
             "courses" => "courses",
             "class-sections" => "classSections",
+            "notifications" => "notifications",
+            "system-settings" => "systemSettings",
+            "audit-logs" => "auditLogs",
             _ => throw new NotFoundException("Tài nguyên không hỗ trợ export")
         };
         var documents = await db.Database.GetCollection<BsonDocument>(collectionName)
@@ -121,6 +126,421 @@ public sealed class ImportExportService(MongoContext db) : IImportExportService
             if (newUsers.Count > 0) await db.Users.InsertManyAsync(newUsers, cancellationToken: ct);
         }
         return new ImportPreviewDto(results.Count, results.Count(x => x.Valid), results.Count(x => !x.Valid), results);
+    }
+
+    public async Task<ImportPreviewDto> ImportResourceAsync(
+        string resource,
+        IFormFile file,
+        bool commit,
+        AdminActor actor,
+        CancellationToken ct)
+    {
+        var supported = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "students",
+            "lecturers",
+            "faculties",
+            "programs",
+            "academic-years",
+            "semesters",
+            "courses",
+            "class-sections"
+        };
+        if (!supported.Contains(resource))
+            throw new NotFoundException("Tài nguyên không hỗ trợ import");
+        if (file.Length == 0)
+            throw new AppException("File import rỗng");
+        if (file.Length > 20L * 1024 * 1024)
+            throw new AppException("File import vượt quá 20 MB");
+
+        using var stream = file.OpenReadStream();
+        using var workbook = new XLWorkbook(stream);
+        var sheet = workbook.Worksheet(1);
+        var header = sheet.RowsUsed().FirstOrDefault()
+            ?? throw new AppException("File không có dòng tiêu đề");
+        var headers = header.CellsUsed()
+            .Select(cell => new
+            {
+                Name = cell.GetString().Trim(),
+                Column = cell.Address.ColumnNumber
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .ToDictionary(
+                item => item.Name,
+                item => item.Column,
+                StringComparer.OrdinalIgnoreCase);
+
+        var required = RequiredImportFields(resource);
+        foreach (var alternatives in required)
+            if (!alternatives.Any(headers.ContainsKey))
+                throw new AppException(
+                    $"Thiếu cột {string.Join(" hoặc ", alternatives)}");
+
+        var rows = new List<ImportRowResult>();
+        var normalizedRows = new List<Dictionary<string, object?>>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var uniqueKey = UniqueImportField(resource);
+
+        foreach (var row in sheet.RowsUsed()
+                     .Where(item => item.RowNumber() > header.RowNumber()))
+        {
+            var data = headers.ToDictionary(
+                pair => pair.Key,
+                pair => ConvertCellValue(row.Cell(pair.Value), pair.Key),
+                StringComparer.OrdinalIgnoreCase);
+            NormalizeImportValues(resource, data);
+            var errors = new List<string>();
+            await ResolveReferenceCodesAsync(
+                resource,
+                data,
+                errors,
+                ct);
+
+            var key = data.GetValueOrDefault(uniqueKey)?.ToString()?.Trim()
+                      ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(key)
+                && data.Values.All(value => string.IsNullOrWhiteSpace(value?.ToString())))
+                continue;
+
+            foreach (var alternatives in required)
+                if (!alternatives.Any(field =>
+                        data.TryGetValue(field, out var value)
+                        && !string.IsNullOrWhiteSpace(value?.ToString())))
+                    errors.Add($"Thiếu {string.Join(" hoặc ", alternatives)}");
+
+            if (!string.IsNullOrWhiteSpace(key) && !seenKeys.Add(key))
+                errors.Add($"{uniqueKey} bị trùng trong file");
+            if (!string.IsNullOrWhiteSpace(key)
+                && await ExistingKeyAsync(
+                    resource,
+                    uniqueKey,
+                    key,
+                    data,
+                    ct))
+                errors.Add($"{uniqueKey} đã tồn tại trong hệ thống");
+            if (data.TryGetValue("email", out var email)
+                && !string.IsNullOrWhiteSpace(email?.ToString())
+                && !email.ToString()!.Contains('@'))
+                errors.Add("Email không hợp lệ");
+            if (resource is "students" or "lecturers"
+                && data.TryGetValue("email", out var accountEmail)
+                && !string.IsNullOrWhiteSpace(accountEmail?.ToString())
+                && await db.Users.Find(
+                        user => user.Email == accountEmail.ToString()
+                                && !user.IsDeleted)
+                    .AnyAsync(ct))
+                errors.Add("Email đăng nhập đã được tài khoản khác sử dụng");
+
+            rows.Add(
+                new ImportRowResult(
+                    row.RowNumber(),
+                    errors.Count == 0,
+                    errors,
+                    data));
+            normalizedRows.Add(data);
+        }
+
+        if (commit)
+        {
+            if (rows.Any(row => !row.Valid))
+                throw new AppException(
+                    "File còn dòng không hợp lệ; hãy sửa trước khi import");
+            foreach (var data in normalizedRows)
+                await adminResources.CreateAsync(
+                    resource,
+                    data,
+                    actor,
+                    ct);
+        }
+
+        return new ImportPreviewDto(
+            rows.Count,
+            rows.Count(row => row.Valid),
+            rows.Count(row => !row.Valid),
+            rows);
+    }
+
+    private static string[][] RequiredImportFields(string resource) =>
+        resource switch
+        {
+            "students" =>
+            [
+                ["studentCode"], ["fullName"], ["email"]
+            ],
+            "lecturers" =>
+            [
+                ["lecturerCode"], ["fullName"], ["email"]
+            ],
+            "faculties" =>
+            [
+                ["facultyCode"], ["facultyName"]
+            ],
+            "programs" =>
+            [
+                ["programCode"], ["programName"]
+            ],
+            "academic-years" =>
+            [
+                ["academicYearCode"], ["academicYearName"],
+                ["startDate"], ["endDate"]
+            ],
+            "semesters" =>
+            [
+                ["semesterCode"], ["semesterName"],
+                ["academicYearId", "academicYearCode"],
+                ["startDate"], ["endDate"]
+            ],
+            "courses" =>
+            [
+                ["courseCode"], ["courseName"], ["credits"]
+            ],
+            "class-sections" =>
+            [
+                ["classSectionCode"],
+                ["courseId", "courseCode"],
+                ["lecturerId", "lecturerCode"],
+                ["semesterId", "semesterCode"]
+            ],
+            _ => []
+        };
+
+    private static string UniqueImportField(string resource) =>
+        resource switch
+        {
+            "students" => "studentCode",
+            "lecturers" => "lecturerCode",
+            "faculties" => "facultyCode",
+            "programs" => "programCode",
+            "academic-years" => "academicYearCode",
+            "semesters" => "semesterCode",
+            "courses" => "courseCode",
+            "class-sections" => "classSectionCode",
+            _ => "id"
+        };
+
+    private async Task ResolveReferenceCodesAsync(
+        string resource,
+        Dictionary<string, object?> data,
+        List<string> errors,
+        CancellationToken ct)
+    {
+        if (resource is "students" or "lecturers" or "programs" or "courses")
+            await ResolveReferenceAsync(
+                data,
+                "facultyId",
+                "facultyCode",
+                "faculties",
+                "facultyCode",
+                "khoa",
+                required: false,
+                errors,
+                ct);
+
+        if (resource == "students")
+            await ResolveReferenceAsync(
+                data,
+                "programId",
+                "programCode",
+                "programs",
+                "programCode",
+                "chương trình đào tạo",
+                required: false,
+                errors,
+                ct);
+
+        if (resource == "semesters")
+            await ResolveReferenceAsync(
+                data,
+                "academicYearId",
+                "academicYearCode",
+                "academicYears",
+                "academicYearCode",
+                "năm học",
+                required: true,
+                errors,
+                ct);
+
+        if (resource == "class-sections")
+        {
+            await ResolveReferenceAsync(
+                data,
+                "courseId",
+                "courseCode",
+                "courses",
+                "courseCode",
+                "môn học",
+                required: true,
+                errors,
+                ct);
+            await ResolveReferenceAsync(
+                data,
+                "lecturerId",
+                "lecturerCode",
+                "lecturers",
+                "lecturerCode",
+                "giảng viên",
+                required: true,
+                errors,
+                ct);
+            await ResolveReferenceAsync(
+                data,
+                "semesterId",
+                "semesterCode",
+                "semesters",
+                "semesterCode",
+                "học kỳ",
+                required: true,
+                errors,
+                ct);
+        }
+    }
+
+    private async Task ResolveReferenceAsync(
+        Dictionary<string, object?> data,
+        string idField,
+        string codeField,
+        string collectionName,
+        string collectionCodeField,
+        string label,
+        bool required,
+        List<string> errors,
+        CancellationToken ct)
+    {
+        var id = data.GetValueOrDefault(idField)?.ToString()?.Trim();
+        var code = data.GetValueOrDefault(codeField)?.ToString()?.Trim();
+        var collection = db.Database.GetCollection<BsonDocument>(
+            collectionName);
+
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            if (!ObjectId.TryParse(id, out var objectId)
+                || !await collection.Find(
+                        Builders<BsonDocument>.Filter.Eq("_id", objectId)
+                        & Builders<BsonDocument>.Filter.Ne(
+                            "isDeleted",
+                            true))
+                    .AnyAsync(ct))
+                errors.Add($"{label} có ID không hợp lệ hoặc đã bị xóa");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            if (required)
+                errors.Add($"Thiếu ID hoặc mã {label}");
+            return;
+        }
+
+        var regex = new BsonRegularExpression(
+            $"^{System.Text.RegularExpressions.Regex.Escape(code)}$",
+            "i");
+        var document = await collection.Find(
+                Builders<BsonDocument>.Filter.Regex(
+                    collectionCodeField,
+                    regex)
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
+            .FirstOrDefaultAsync(ct);
+        if (document is null)
+        {
+            errors.Add($"Không tìm thấy {label} có mã {code}");
+            return;
+        }
+
+        data[idField] = document["_id"].AsObjectId.ToString();
+    }
+
+    private async Task<bool> ExistingKeyAsync(
+        string resource,
+        string uniqueKey,
+        string key,
+        Dictionary<string, object?> data,
+        CancellationToken ct)
+    {
+        var collectionName = resource switch
+        {
+            "academic-years" => "academicYears",
+            "class-sections" => "classSections",
+            _ => resource
+        };
+        var collection = db.Database.GetCollection<BsonDocument>(
+            collectionName);
+        var regex = new BsonRegularExpression(
+            $"^{System.Text.RegularExpressions.Regex.Escape(key)}$",
+            "i");
+        var filter = Builders<BsonDocument>.Filter.Regex(uniqueKey, regex)
+                     & Builders<BsonDocument>.Filter.Ne("isDeleted", true);
+        if (resource == "semesters"
+            && data.TryGetValue("academicYearId", out var academicYearId)
+            && !string.IsNullOrWhiteSpace(academicYearId?.ToString()))
+            filter &= Builders<BsonDocument>.Filter.Eq(
+                "academicYearId",
+                academicYearId.ToString());
+
+        return await collection.Find(filter).AnyAsync(ct);
+    }
+
+    private static void NormalizeImportValues(
+        string resource,
+        Dictionary<string, object?> data)
+    {
+        if (data.TryGetValue("email", out var email)
+            && email is not null)
+            data["email"] = email.ToString()!.Trim().ToLowerInvariant();
+
+        var fields = resource switch
+        {
+            "students" => new[] { "studentCode" },
+            "lecturers" => new[] { "lecturerCode" },
+            "faculties" => new[] { "facultyCode" },
+            "programs" => new[] { "programCode" },
+            "academic-years" => new[] { "academicYearCode" },
+            "semesters" => new[] { "semesterCode", "academicYearCode" },
+            "courses" => new[] { "courseCode", "facultyCode" },
+            "class-sections" => new[]
+            {
+                "classSectionCode", "courseCode", "lecturerCode",
+                "semesterCode"
+            },
+            _ => []
+        };
+        foreach (var field in fields)
+            if (data.TryGetValue(field, out var value)
+                && value is not null)
+                data[field] = value.ToString()!.Trim().ToUpperInvariant();
+    }
+
+    private static object? ConvertCellValue(IXLCell cell, string field)
+    {
+        if (cell.IsEmpty())
+            return null;
+        if (field.EndsWith("Date", StringComparison.OrdinalIgnoreCase)
+            || field.EndsWith("At", StringComparison.OrdinalIgnoreCase)
+            || field.EndsWith("Start", StringComparison.OrdinalIgnoreCase)
+            || field.EndsWith("End", StringComparison.OrdinalIgnoreCase))
+        {
+            if (cell.TryGetValue<DateTime>(out var date))
+                return date.ToUniversalTime();
+        }
+        if (field.StartsWith("is", StringComparison.OrdinalIgnoreCase)
+            || field.StartsWith("exclude", StringComparison.OrdinalIgnoreCase))
+        {
+            var rawBoolean = cell.GetString().Trim();
+            if (bool.TryParse(rawBoolean, out var boolean))
+                return boolean;
+            if (rawBoolean == "1")
+                return true;
+            if (rawBoolean == "0")
+                return false;
+        }
+        if (new[]
+            {
+                "credits", "capacity", "requiredCredits",
+                "durationYears", "theoryPeriods", "practicePeriods"
+            }.Contains(field, StringComparer.OrdinalIgnoreCase)
+            && cell.TryGetValue<double>(out var number))
+            return number;
+
+        return cell.GetString().Trim();
     }
 
     private static string Read(IXLRow row, IReadOnlyDictionary<string, int> headers, string key) => headers.TryGetValue(key, out var col) ? row.Cell(col).GetString().Trim() : "";

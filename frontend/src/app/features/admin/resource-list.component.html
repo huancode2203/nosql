@@ -1,31 +1,332 @@
 <app-page-header [title]="title()" [subtitle]="subtitle()">
-  <button class="primary-button" (click)="open()"><span class="material-symbols-outlined">add</span> Thêm mới</button>
+  @if (canWrite()) {
+    <button class="primary-button" (click)="open()" [disabled]="deletedOnly()">
+      <span class="material-symbols-outlined">add</span>
+      Thêm mới
+    </button>
+  }
 </app-page-header>
+
 <article class="panel table-panel">
   <div class="table-toolbar">
-    <div class="search-box"><span class="material-symbols-outlined">search</span><input [(ngModel)]="search" (keyup.enter)="load()" placeholder="Tìm kiếm..."/><button (click)="load()">Tìm</button></div>
-    <div>
-      @if(resource()==='students'){
-        <label class="secondary-button file-button"><span class="material-symbols-outlined">upload_file</span> Import Excel<input type="file" accept=".xlsx" (change)="chooseImport($any($event.target).files)"/></label>
+    <div class="search-box">
+      <span class="material-symbols-outlined">search</span>
+      <input
+        [(ngModel)]="search"
+        (keyup.enter)="load(true)"
+        placeholder="Tìm kiếm...">
+      <button (click)="load(true)">Tìm</button>
+    </div>
+
+    <div class="inline-actions">
+      <button
+        class="secondary-button"
+        [class.danger]="deletedOnly()"
+        (click)="toggleTrash()">
+        <span class="material-symbols-outlined">
+          {{ deletedOnly() ? 'arrow_back' : 'delete_sweep' }}
+        </span>
+        {{ deletedOnly() ? 'Quay lại danh sách' : 'Thùng rác' }}
+      </button>
+
+      @if (canImport() && canImportExport() && !deletedOnly()) {
+        <label class="secondary-button file-button">
+          <span class="material-symbols-outlined">upload_file</span>
+          Import Excel
+          <input
+            type="file"
+            accept=".xlsx"
+            (change)="chooseImport($any($event.target).files)">
+        </label>
       }
-      <button class="secondary-button" (click)="exportData()"><span class="material-symbols-outlined">download</span> Export Excel</button>
+
+      @if (canImportExport()) {
+        <button class="secondary-button" (click)="exportData()">
+          <span class="material-symbols-outlined">download</span>
+          Export Excel
+        </button>
+      }
     </div>
   </div>
-  <div class="table-wrap"><table><thead><tr>@for(column of columns();track column){<th>{{column}}</th>}<th>Thao tác</th></tr></thead><tbody>
-    @if(loading()){<tr><td [attr.colspan]="columns().length+1">Đang tải dữ liệu...</td></tr>}
-    @else{@for(item of items();track item['id']){<tr>@for(column of columns();track column){<td>{{display(item[column])}}</td>}<td><button class="icon-button" (click)="open(item)"><span class="material-symbols-outlined">edit</span></button><button class="icon-button danger" (click)="remove(item)"><span class="material-symbols-outlined">delete</span></button></td></tr>}@empty{<tr><td [attr.colspan]="columns().length+1" class="empty">Không có dữ liệu phù hợp</td></tr>}}
-  </tbody></table></div>
-  <footer class="table-footer"><span>Tổng cộng {{total}} bản ghi</span><div><button [disabled]="page===1" (click)="page=page-1;load()">Trước</button><b>Trang {{page}}</b><button [disabled]="items().length<20" (click)="page=page+1;load()">Sau</button></div></footer>
+
+  @if (deletedOnly()) {
+    <div class="alert-item danger" style="margin: 0 0 16px">
+      <span class="material-symbols-outlined">delete_sweep</span>
+      <div>
+        <b>Thùng rác</b>
+        <p>Các bản ghi xóa mềm có thể được khôi phục nếu không trùng dữ liệu đang hoạt động.</p>
+      </div>
+    </div>
+  }
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          @for (column of columns(); track column) {
+            <th>{{ column }}</th>
+          }
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (loading()) {
+          <tr>
+            <td [attr.colspan]="columns().length + 1">Đang tải dữ liệu...</td>
+          </tr>
+        } @else {
+          @for (item of items(); track item['id']) {
+            <tr>
+              @for (column of columns(); track column) {
+                <td>{{ display(item[column]) }}</td>
+              }
+              <td>
+                @if (deletedOnly() && canDelete()) {
+                  <button
+                    class="secondary-button small-button"
+                    (click)="restore(item)">
+                    <span class="material-symbols-outlined">restore</span>
+                    Khôi phục
+                  </button>
+                } @else if (!deletedOnly()) {
+                  @if (canWrite()) {
+                  <button class="icon-button" (click)="open(item)" title="Sửa">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                  }
+                  @if (canDelete()) {
+                  <button
+                    class="icon-button danger"
+                    (click)="remove(item)"
+                    title="Xóa mềm">
+                    <span class="material-symbols-outlined">delete</span>
+                  </button>
+                  }
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td [attr.colspan]="columns().length + 1" class="empty">
+                Không có dữ liệu phù hợp
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="table-footer">
+    <span>Tổng cộng {{ total }} bản ghi</span>
+    <div>
+      <button
+        [disabled]="page === 1"
+        (click)="page = page - 1; load()">
+        Trước
+      </button>
+      <b>Trang {{ page }}</b>
+      <button
+        [disabled]="items().length < 20"
+        (click)="page = page + 1; load()">
+        Sau
+      </button>
+    </div>
+  </footer>
 </article>
-@if(modal()){
-  <div class="modal-backdrop" (click)="modal.set(false)"><form class="modal" (click)="$event.stopPropagation()" (submit)="$event.preventDefault();save()"><div class="modal-heading"><div><h3>{{editing()['id']?'Cập nhật':'Thêm mới'}} {{title()}}</h3><p>Nhập các trường dữ liệu cần thiết.</p></div><button type="button" class="icon-button" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button></div>
-    <div class="form-grid">@for(column of columns();track column){@if(column!=='id'){<label>{{column}}<input [type]="fieldType(column)" [ngModel]="editing()[column]" (ngModelChange)="updateField(column,$event)" [ngModelOptions]="{standalone:true}"/></label>}}</div>
-    <div class="modal-actions"><button type="button" class="secondary-button" (click)="modal.set(false)">Hủy</button><button class="primary-button">Lưu dữ liệu</button></div>
-  </form></div>
+
+@if (modal()) {
+  <div class="modal-backdrop" (click)="modal.set(false)">
+    <form
+      class="modal wide-modal"
+      (click)="$event.stopPropagation()"
+      (submit)="$event.preventDefault(); save()">
+      <div class="modal-heading">
+        <div>
+          <h3>{{ editing()['id'] ? 'Cập nhật' : 'Thêm mới' }} {{ title() }}</h3>
+          <p>Biểu mẫu sử dụng đúng khóa liên kết mà API yêu cầu.</p>
+        </div>
+        <button
+          type="button"
+          class="icon-button"
+          (click)="modal.set(false)">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="form-grid">
+        @for (field of fields(); track field.key) {
+          @if (!field.createOnly || !editing()['id']) {
+            @if (field.type === 'permissions' && canManageUserPermissions()) {
+              <fieldset class="full-row permission-fieldset">
+                <legend>{{ field.label }}</legend>
+                <p class="field-help">
+                  Chọn từng quyền lẻ. Các quyền không được chọn sẽ bị backend từ chối.
+                </p>
+                <div class="permission-grid">
+                  @for (permission of permissionOptions; track permission.value) {
+                    <label class="checkbox-row">
+                      <input
+                        type="checkbox"
+                        [checked]="hasPermission(permission.value)"
+                        (change)="togglePermission(permission.value, $any($event.target).checked)">
+                      <span>{{ permission.label }}</span>
+                    </label>
+                  }
+                </div>
+              </fieldset>
+            } @else if (field.type === 'checkbox') {
+              <label class="checkbox-row">
+                <input
+                  type="checkbox"
+                  [ngModel]="!!editing()[field.key]"
+                  (ngModelChange)="updateField(field.key, $event)"
+                  [ngModelOptions]="{ standalone: true }">
+                <span>{{ field.label }}</span>
+              </label>
+            } @else {
+              <label>
+                {{ field.label }}
+                @if (field.required) {
+                  <span class="danger-text">*</span>
+                }
+
+                @if (field.type === 'select') {
+                  <select
+                    [ngModel]="editing()[field.key]"
+                    (ngModelChange)="updateField(field.key, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    [required]="field.required ?? false">
+                    <option value="">-- Chọn --</option>
+                    @for (option of fieldOptions(field); track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input
+                    [type]="field.type || 'text'"
+                    [ngModel]="editing()[field.key]"
+                    (ngModelChange)="updateField(field.key, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    [required]="field.required ?? false">
+                }
+              </label>
+            }
+          }
+        }
+
+        @if (resource() === 'users' && editing()['id']) {
+          <fieldset class="full-row permission-fieldset avatar-admin-fieldset">
+            <legend>Ảnh đại diện</legend>
+            <p class="field-help">
+              Chỉ Admin có quyền riêng này mới được tải lên hoặc xóa ảnh.
+              Hỗ trợ PNG, JPEG, WebP; tối đa 5 MB.
+            </p>
+            <div class="avatar-admin-editor">
+              <div class="avatar-admin-preview">
+                @if (editing()['avatarUrl']) {
+                  <img [src]="avatarSrc()" alt="Ảnh đại diện hiện tại">
+                } @else {
+                  <span class="material-symbols-outlined">person</span>
+                }
+              </div>
+              @if (canManageUserAvatars()) {
+                <label class="secondary-button file-button">
+                  <span class="material-symbols-outlined">upload</span>
+                  {{ avatarUploading() ? 'Đang tải...' : 'Tải ảnh lên' }}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    [disabled]="avatarUploading()"
+                    (change)="chooseAvatar($any($event.target).files)">
+                </label>
+                @if (editing()['avatarUrl']) {
+                  <button
+                    type="button"
+                    class="secondary-button danger"
+                    [disabled]="avatarUploading()"
+                    (click)="removeAvatar()">
+                    <span class="material-symbols-outlined">delete</span>
+                    Xóa ảnh
+                  </button>
+                }
+              } @else {
+                <span class="badge danger">Không có quyền quản lý ảnh</span>
+              }
+            </div>
+          </fieldset>
+        }
+      </div>
+
+      <div class="modal-actions">
+        <button
+          type="button"
+          class="secondary-button"
+          (click)="modal.set(false)">
+          Hủy
+        </button>
+        <button class="primary-button">Lưu dữ liệu</button>
+      </div>
+    </form>
+  </div>
 }
-@if(importModal()){
-  <div class="modal-backdrop" (click)="importModal.set(false)"><section class="modal wide-modal" (click)="$event.stopPropagation()"><div class="modal-heading"><div><h3>Xem trước import sinh viên</h3><p>{{importFile?.name}}</p></div><button class="icon-button" (click)="importModal.set(false)"><span class="material-symbols-outlined">close</span></button></div>
-    @if(importing()){<div class="empty">Đang đọc và kiểm tra file...</div>}
-    @if(preview();as data){<div class="result-summary"><div><b>{{data.totalRows}}</b><span>Tổng dòng</span></div><div><b class="success-text">{{data.validRows}}</b><span>Hợp lệ</span></div><div><b class="danger-text">{{data.invalidRows}}</b><span>Có lỗi</span></div></div><div class="table-wrap compact-table"><table><thead><tr><th>Dòng</th><th>Mã SV</th><th>Họ tên</th><th>Kết quả</th></tr></thead><tbody>@for(row of data.rows;track row.rowNumber){<tr><td>{{row.rowNumber}}</td><td>{{row.data['studentCode']}}</td><td>{{row.data['fullName']}}</td><td><span class="badge" [class.success]="row.valid" [class.danger]="!row.valid">{{row.valid?'Hợp lệ':row.errors.join('; ')}}</span></td></tr>}</tbody></table></div><div class="modal-actions"><button class="secondary-button" (click)="importModal.set(false)">Đóng</button><button class="primary-button" [disabled]="data.invalidRows>0||importing()" (click)="previewImport(true)">Xác nhận import</button></div>}
-  </section></div>
+
+@if (importModal()) {
+  <div class="modal-backdrop" (click)="importModal.set(false)">
+    <section class="modal wide-modal" (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <h3>Xem trước import {{ title() }}</h3>
+          <p>{{ importFile?.name }}</p>
+        </div>
+        <button class="icon-button" (click)="importModal.set(false)">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      @if (importing()) {
+        <div class="empty">Đang đọc và kiểm tra file...</div>
+      }
+
+      @if (preview(); as data) {
+        <div class="result-summary">
+          <div><b>{{ data.totalRows }}</b><span>Tổng dòng</span></div>
+          <div><b class="success-text">{{ data.validRows }}</b><span>Hợp lệ</span></div>
+          <div><b class="danger-text">{{ data.invalidRows }}</b><span>Có lỗi</span></div>
+        </div>
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr><th>Dòng</th><th>Dữ liệu</th><th>Kết quả</th></tr>
+            </thead>
+            <tbody>
+              @for (row of data.rows; track row.rowNumber) {
+                <tr>
+                  <td>{{ row.rowNumber }}</td>
+                  <td>{{ display(row.data) }}</td>
+                  <td>
+                    <span
+                      class="badge"
+                      [class.success]="row.valid"
+                      [class.danger]="!row.valid">
+                      {{ row.valid ? 'Hợp lệ' : row.errors.join('; ') }}
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-button" (click)="importModal.set(false)">Đóng</button>
+          <button
+            class="primary-button"
+            [disabled]="data.invalidRows > 0 || importing()"
+            (click)="previewImport(true)">
+            Xác nhận import
+          </button>
+        </div>
+      }
+    </section>
+  </div>
 }

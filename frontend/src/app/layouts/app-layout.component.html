@@ -33,7 +33,14 @@
           <span class="material-symbols-outlined">{{ darkMode() ? 'light_mode' : 'dark_mode' }}</span>
         </button>
         <button class="account-button" type="button" (click)="userMenuOpen.set(!userMenuOpen())">
-          <span class="account-avatar">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+          @if (user()?.avatarUrl) {
+            <img
+              class="account-avatar"
+              [src]="api.assetUrl(user()?.avatarUrl)"
+              alt="Ảnh đại diện">
+          } @else {
+            <span class="account-avatar">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+          }
           <span class="account-copy"><strong>{{ user()?.fullName }}</strong><small>{{ user()?.role }}</small></span>
           <span class="material-symbols-outlined">arrow_drop_down</span>
         </button>
@@ -98,7 +105,14 @@
     <div class="menu-overlay" (click)="userMenuOpen.set(false)"></div>
     <div class="account-menu">
       <div class="account-summary">
-        <span class="account-avatar large">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+        @if (user()?.avatarUrl) {
+          <img
+            class="account-avatar large"
+            [src]="api.assetUrl(user()?.avatarUrl)"
+            alt="Ảnh đại diện">
+        } @else {
+          <span class="account-avatar large">{{ user()?.fullName?.charAt(0) || 'U' }}</span>
+        }
         <div><strong>{{ user()?.fullName }}</strong><small>{{ user()?.email }}</small></div>
       </div>
       <a routerLink="/profile" (click)="userMenuOpen.set(false)"><span class="material-symbols-outlined">person</span> Hồ sơ cá nhân</a>

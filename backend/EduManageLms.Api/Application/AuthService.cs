@@ -183,7 +183,16 @@ public sealed class AuthService(MongoContext db, JwtTokenService jwt) : IAuthSer
         (string token, DateTime expires) access,
         string refreshToken) =>
         new(access.token, refreshToken, access.expires,
-            new LoginUserDto(user.Id, user.Username, user.Email, user.FullName, user.Role, user.AvatarUrl));
+            new LoginUserDto(
+                user.Id,
+                user.Username,
+                user.Email,
+                user.FullName,
+                user.Role,
+                user.AvatarUrl,
+                user.PermissionsConfigured
+                    ? user.Permissions
+                    : AppPermissions.DefaultsForRole(user.Role)));
 
     private static void ValidatePassword(string password)
     {

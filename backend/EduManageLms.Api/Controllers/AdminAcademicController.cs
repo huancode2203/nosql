@@ -16,7 +16,37 @@ public sealed class AdminAcademicController(
     AdminAcademicService service,
     IImportExportService importExport) : ControllerBase
 {
+    [HttpGet("grading-courses")]
+    [RequirePermission(AppPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<AdminCourseOptionDto>>>> GradingCourses(
+        CancellationToken ct)
+    {
+        var result = await service.GetGradingCoursesAsync(ct);
+        return Ok(
+            ApiResponse<IReadOnlyCollection<AdminCourseOptionDto>>.Ok(
+                result));
+    }
+
+    [HttpGet("report-options")]
+    [RequirePermission(AppPermissions.ReportsRead)]
+    public async Task<ActionResult<ApiResponse<AdminReportOptionsDto>>> ReportOptions(
+        CancellationToken ct)
+    {
+        var result = await service.GetReportOptionsAsync(ct);
+        return Ok(ApiResponse<AdminReportOptionsDto>.Ok(result));
+    }
+
+    [HttpGet("notification-options")]
+    [RequirePermission(AppPermissions.NotificationsManage)]
+    public async Task<ActionResult<ApiResponse<AdminNotificationOptionsDto>>> NotificationOptions(
+        CancellationToken ct)
+    {
+        var result = await service.GetNotificationOptionsAsync(ct);
+        return Ok(ApiResponse<AdminNotificationOptionsDto>.Ok(result));
+    }
+
     [HttpGet("courses/{courseId}/design")]
+    [RequirePermission(AppPermissions.SettingsManage)]
     public async Task<ActionResult<ApiResponse<CourseDesignDto>>> GetCourseDesign(
         string courseId,
         CancellationToken ct)
@@ -30,6 +60,7 @@ public sealed class AdminAcademicController(
     }
 
     [HttpPut("courses/{courseId}/design")]
+    [RequirePermission(AppPermissions.SettingsManage)]
     public async Task<ActionResult<ApiResponse<CourseDesignDto>>> SaveCourseDesign(
         string courseId,
         SaveCourseDesignRequest request,
@@ -48,6 +79,7 @@ public sealed class AdminAcademicController(
     }
 
     [HttpGet("audit-logs")]
+    [RequirePermission(AppPermissions.AuditRead)]
     public async Task<ActionResult<ApiResponse<PagedResult<Dictionary<string, object?>>>>> AuditLogs(
         [FromQuery] string? search,
         [FromQuery] string? role,
@@ -76,16 +108,72 @@ public sealed class AdminAcademicController(
     }
 
     [HttpGet("reports")]
+    [RequirePermission(AppPermissions.ReportsRead)]
     public async Task<ActionResult<ApiResponse<AdminReportDto>>> Reports(
+        [FromQuery] string? academicYearId,
+        [FromQuery] string? semesterId,
+        [FromQuery] string? facultyId,
+        [FromQuery] string? programId,
         CancellationToken ct)
     {
-        var result = await service.GetReportsAsync(ct);
+        var result = await service.GetReportsAsync(
+            academicYearId,
+            semesterId,
+            facultyId,
+            programId,
+            ct);
 
         return Ok(
             ApiResponse<AdminReportDto>.Ok(result));
     }
 
+    [HttpGet("reports/export")]
+    [RequirePermission(AppPermissions.ReportsExport)]
+    public async Task<IActionResult> ExportReport(
+        [FromQuery] string? academicYearId,
+        [FromQuery] string? semesterId,
+        [FromQuery] string? facultyId,
+        [FromQuery] string? programId,
+        CancellationToken ct)
+    {
+        var bytes = await service.ExportReportAsync(
+            academicYearId,
+            semesterId,
+            facultyId,
+            programId,
+            ct);
+
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument."
+            + "spreadsheetml.sheet",
+            $"BaoCaoDaoTao-{DateTime.UtcNow:yyyyMMddHHmm}.xlsx");
+    }
+
+    [HttpGet("reports/export-pdf")]
+    [RequirePermission(AppPermissions.ReportsExport)]
+    public async Task<IActionResult> ExportReportPdf(
+        [FromQuery] string? academicYearId,
+        [FromQuery] string? semesterId,
+        [FromQuery] string? facultyId,
+        [FromQuery] string? programId,
+        CancellationToken ct)
+    {
+        var bytes = await service.ExportReportPdfAsync(
+            academicYearId,
+            semesterId,
+            facultyId,
+            programId,
+            ct);
+
+        return File(
+            bytes,
+            "application/pdf",
+            $"BaoCaoDaoTao-{DateTime.UtcNow:yyyyMMddHHmm}.pdf");
+    }
+
     [HttpGet("grade-reopen-requests")]
+    [RequirePermission(AppPermissions.GradesReopen)]
     public async Task<ActionResult<ApiResponse<PagedResult<Dictionary<string, object?>>>>> ReopenRequests(
         [FromQuery] string? status = "Pending",
         [FromQuery] string? search = null,
@@ -106,6 +194,7 @@ public sealed class AdminAcademicController(
     }
 
     [HttpGet("grade-reopen-requests/{id}")]
+    [RequirePermission(AppPermissions.GradesReopen)]
     public async Task<ActionResult<ApiResponse<Dictionary<string, object?>>>> ReopenRequest(
         string id,
         CancellationToken ct)
@@ -120,6 +209,7 @@ public sealed class AdminAcademicController(
     }
 
     [HttpPut("grade-reopen-requests/{id}")]
+    [RequirePermission(AppPermissions.GradesReopen)]
     public async Task<ActionResult<ApiResponse<Dictionary<string, object?>>>> ReviewReopenRequest(
         string id,
         ReviewGradeReopenRequest request,
@@ -141,6 +231,7 @@ public sealed class AdminAcademicController(
     }
 
     [HttpGet("export/{resource}")]
+    [RequirePermission(AppPermissions.ImportExport)]
     public async Task<IActionResult> Export(
         string resource,
         CancellationToken ct)
@@ -156,23 +247,35 @@ public sealed class AdminAcademicController(
             $"{resource}-{DateTime.UtcNow:yyyyMMddHHmm}.xlsx");
     }
 
-    [HttpPost("import/students")]
+    [HttpPost("import/{resource}")]
+    [RequirePermission(AppPermissions.ImportExport)]
     [RequestSizeLimit(20 * 1024 * 1024)]
-    public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> ImportStudents(
+    public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> ImportResource(
+        string resource,
         [FromForm] IFormFile file,
         [FromQuery] bool commit = false,
         CancellationToken ct = default)
     {
-        var result = await importExport.ImportStudentsAsync(
+        var result = await importExport.ImportResourceAsync(
+            resource,
             file,
             commit,
+            Actor(),
             ct);
 
         return Ok(
             ApiResponse<ImportPreviewDto>.Ok(
                 result,
                 commit
-                    ? "Import sinh viên thành công."
+                    ? $"Import {resource} thành công."
                     : "Xem trước dữ liệu import thành công."));
     }
+
+    private AdminActor Actor() =>
+        new(
+            User.UserId(),
+            User.Identity?.Name ?? string.Empty,
+            User.RoleName(),
+            HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
+            Request.Headers.UserAgent.ToString());
 }

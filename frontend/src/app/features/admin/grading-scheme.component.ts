@@ -1,14 +1,31 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
-import { PagedResult } from '../../core/models/api.models';
 import { CloDefinition, CourseDesign, GradingComponentDefinition, GradingScheme } from '../../core/models/portal.models';
 import { PageHeaderComponent } from '../../shared/page-header.component';
 import { ToastService } from '../../core/services/toast.service';
 
+interface CourseOption {
+  id: string;
+  courseCode: string;
+  courseName: string;
+}
+
 @Component({ standalone: true, imports: [FormsModule, PageHeaderComponent], template: `
 <app-page-header title="Cấu trúc điểm và CLO" subtitle="Tạo phiên bản cấu trúc điểm theo năm học, không làm thay đổi dữ liệu học kỳ cũ."><button class="primary-button" [disabled]="!design()||saving()" (click)="save()"><span class="material-symbols-outlined">save</span> Lưu phiên bản mới</button></app-page-header>
-<div class="filter-bar"><label>Môn học<select [(ngModel)]="courseId" (ngModelChange)="loadDesign()"><option value="">Chọn môn học</option>@for(course of courses();track course['id']){<option [value]="course['id']">{{course['courseCode']}} - {{course['courseName']}}</option>}</select></label><label>Năm học<input [(ngModel)]="scheme.academicYear" placeholder="2026-2027"/></label><label>Ngưỡng đạt môn<input type="number" [(ngModel)]="scheme.passingScore"/></label><label>Làm tròn<select [(ngModel)]="scheme.roundingMode"><option>Normal</option><option>None</option><option>Floor</option><option>Ceiling</option></select></label></div>
+<div class="filter-bar"><label>Môn học<select [(ngModel)]="courseId" (ngModelChange)="loadDesign()" [disabled]="loadingCourses()"><option value="">{{loadingCourses()?'Đang tải môn học...':'Chọn môn học'}}</option>@for(course of courses();track course.id){<option [value]="course.id">{{course.courseCode}} - {{course.courseName}}</option>}</select></label><label>Năm học<input [(ngModel)]="scheme.academicYear" placeholder="2026-2027"/></label><label>Ngưỡng đạt môn<input type="number" [(ngModel)]="scheme.passingScore"/></label><label>Làm tròn<select [(ngModel)]="scheme.roundingMode"><option>Normal</option><option>None</option><option>Floor</option><option>Ceiling</option></select></label></div>
+@if (loadingDesign()) {
+  <article class="panel"><div class="empty">Đang tải cấu trúc điểm và CLO...</div></article>
+}
+@if (loadError()) {
+  <article class="panel">
+    <div class="alert-item danger">
+      <span class="material-symbols-outlined">error</span>
+      <div><b>Không thể tải cấu trúc điểm</b><p>{{loadError()}}</p></div>
+      <button class="secondary-button" type="button" (click)="retryLoad()">Thử lại</button>
+    </div>
+  </article>
+}
 @if(design();as current){
 <div class="dashboard-grid">
   <article class="panel span-2"><div class="panel-heading"><div><h3>Chuẩn đầu ra môn học</h3><p>{{current.courseCode}} - {{current.courseName}}</p></div><button class="secondary-button" (click)="addClo()"><span class="material-symbols-outlined">add</span> Thêm CLO</button></div>
@@ -22,27 +39,78 @@ import { ToastService } from '../../core/services/toast.service';
 </div>}
 ` })
 export class GradingSchemeComponent implements OnInit {
-  courses = signal<Record<string, any>[]>([]);
+  courses = signal<CourseOption[]>([]);
   design = signal<CourseDesign | null>(null);
+  loadingCourses = signal(false);
+  loadingDesign = signal(false);
+  loadError = signal('');
   courseId = '';
   clos: CloDefinition[] = [];
   scheme: GradingScheme = this.emptyScheme();
   saving = signal(false);
   private revision = signal(0);
   constructor(private api: ApiService, private toast: ToastService) {}
-  ngOnInit() { this.api.get<PagedResult<Record<string, any>>>('/admin/courses', { pageNumber: 1, pageSize: 100 }).subscribe(response => this.courses.set(response.data.items)); }
+  ngOnInit() { this.loadCourses(); }
+  loadCourses() {
+    this.loadingCourses.set(true);
+    this.loadError.set('');
+    this.api.get<CourseOption[]>('/admin/grading-courses').subscribe({
+      next: response => {
+        const courses = response.data ?? [];
+        this.courses.set(courses);
+        this.loadingCourses.set(false);
+        if (!this.courseId && courses.length > 0) {
+          this.courseId = courses[0].id;
+          this.loadDesign();
+        }
+      },
+      error: error => {
+        this.loadingCourses.set(false);
+        this.loadError.set(this.errorMessage(
+          error,
+          'Không thể tải danh sách môn học.'
+        ));
+        this.toast.show(this.loadError(), 'error');
+      }
+    });
+  }
   loadDesign() {
-    if (!this.courseId) { this.design.set(null); return; }
+    if (!this.courseId) {
+      this.design.set(null);
+      this.loadError.set('');
+      return;
+    }
+    this.loadingDesign.set(true);
+    this.loadError.set('');
+    this.design.set(null);
     this.api.get<CourseDesign>(`/admin/courses/${this.courseId}/design`).subscribe({
       next: response => {
-        this.design.set(response.data);
-        this.clos = structuredClone(response.data.clos);
-        const latest = response.data.gradingSchemes[0];
-        this.scheme = latest ? { ...structuredClone(latest), version: 0, active: true, academicYear: this.nextYear(latest.academicYear) } : this.emptyScheme();
+        const design = this.normalizeDesign(response.data);
+        this.design.set(design);
+        this.clos = structuredClone(design.clos);
+        const latest = design.gradingSchemes[0];
+        this.scheme = latest
+          ? this.prepareNextScheme(latest)
+          : this.emptyScheme();
+        this.loadingDesign.set(false);
         this.touch();
       },
-      error: () => this.toast.show('Không thể tải cấu trúc điểm', 'error')
+      error: error => {
+        this.loadingDesign.set(false);
+        this.loadError.set(this.errorMessage(
+          error,
+          'API không trả về được dữ liệu cấu trúc điểm.'
+        ));
+        this.toast.show(
+          `Không thể tải cấu trúc điểm: ${this.loadError()}`,
+          'error'
+        );
+      }
     });
+  }
+  retryLoad() {
+    if (this.courseId) this.loadDesign();
+    else this.loadCourses();
   }
   addClo() { const number = this.clos.length + 1; this.clos.push({ cloCode: `CLO${number}`, name: `Chuẩn đầu ra ${number}`, description: '', bloomLevel: 'Apply', threshold: 50, weight: 0, active: true }); this.touch(); }
   addComponent() { this.scheme.components.push({ componentId: `TP${this.scheme.components.length + 1}`, name: 'Thành phần mới', type: 'Assignment', weight: 0, maxScore: 10, isRequired: false, isFinalCondition: false, cloMappings: [] }); this.touch(); }
@@ -54,9 +122,50 @@ export class GradingSchemeComponent implements OnInit {
     if (this.totalWeight() !== 100) { this.toast.show('Tổng trọng số phải bằng 100%', 'error'); return; }
     this.saving.set(true);
     this.api.put<CourseDesign>(`/admin/courses/${this.courseId}/design`, { clos: this.clos, scheme: this.scheme }).subscribe({
-      next: response => { this.design.set(response.data); this.saving.set(false); this.toast.show('Đã tạo phiên bản cấu trúc điểm mới', 'success'); this.loadDesign(); },
+      next: response => {
+        this.design.set(response.data);
+        this.saving.set(false);
+        this.toast.show(
+          'Đã tạo phiên bản cấu trúc điểm mới',
+          'success'
+        );
+        this.loadDesign();
+      },
       error: error => { this.saving.set(false); this.toast.show(error.error?.message || 'Không thể lưu cấu trúc điểm', 'error'); }
     });
+  }
+  private prepareNextScheme(latest: GradingScheme): GradingScheme {
+    const next = structuredClone(latest);
+    next.version = 0;
+    next.active = true;
+    next.academicYear = this.nextYear(latest.academicYear);
+    next.components = (next.components ?? []).map(component => ({
+      ...component,
+      cloMappings: component.cloMappings ?? []
+    }));
+    return next;
+  }
+  private normalizeDesign(value: CourseDesign): CourseDesign {
+    return {
+      ...value,
+      clos: value.clos ?? [],
+      gradingSchemes: (value.gradingSchemes ?? []).map(scheme => ({
+        ...scheme,
+        components: (scheme.components ?? []).map(component => ({
+          ...component,
+          cloMappings: component.cloMappings ?? []
+        }))
+      }))
+    };
+  }
+  private errorMessage(error: any, fallback: string) {
+    if (error?.status === 403) {
+      return 'Tài khoản chưa có quyền quản lý cấu trúc điểm.';
+    }
+    if (error?.status === 404) {
+      return 'Không tìm thấy môn học hoặc API cấu trúc điểm chưa được triển khai.';
+    }
+    return error?.error?.message || fallback;
   }
   private emptyScheme(): GradingScheme { return { version: 0, academicYear: '2026-2027', components: [], passingScore: 4, roundingMode: 'Normal', decimalPlaces: 2, effectiveFrom: new Date().toISOString(), active: true }; }
   private nextYear(value: string) { const parts = value.split('-').map(Number); return parts.length === 2 && parts.every(Number.isFinite) ? `${parts[0] + 1}-${parts[1] + 1}` : value; }

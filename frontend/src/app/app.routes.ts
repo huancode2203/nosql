@@ -1,15 +1,18 @@
 ﻿import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
+import { permissionGuard } from './core/guards/permission.guard';
 
 const adminResource = (
   path: string,
   resource: string,
   title: string,
   columns: string[],
-  subtitle = 'Quản lý dữ liệu hệ thống'
+  subtitle = 'Quản lý dữ liệu hệ thống',
+  permission = 'admin.resources.read'
 ) => ({
   path,
+  canActivate: [permissionGuard(permission)],
   loadComponent: () =>
     import('./features/admin/resource-list.component')
       .then(module => module.ResourceListComponent),
@@ -171,41 +174,49 @@ export const routes: Routes = [
 
           {
             path: 'gradebooks',
+            canActivate: [permissionGuard('admin.grades.review')],
             loadComponent: () =>
               import('./features/admin/gradebook-review.component')
                 .then(module => module.GradebookReviewComponent)
-          },          {
+          },
+          {
             path: 'grading-schemes',
+            canActivate: [permissionGuard('admin.settings.manage')],
             loadComponent: () =>
               import('./features/admin/grading-scheme.component')
                 .then(module => module.GradingSchemeComponent)
           },
           {
             path: 'notifications',
+            canActivate: [permissionGuard('admin.notifications.manage')],
             loadComponent: () =>
               import('./features/admin/admin-notifications.component')
                 .then(module => module.AdminNotificationsComponent)
           },
           {
             path: 'reports',
+            canActivate: [permissionGuard('admin.reports.read')],
             loadComponent: () =>
               import('./features/admin/reports.component')
                 .then(module => module.ReportsComponent)
           },
           {
             path: 'grade-reopen-requests',
+            canActivate: [permissionGuard('admin.grades.reopen')],
             loadComponent: () =>
               import('./features/admin/reopen-requests.component')
                 .then(module => module.ReopenRequestsComponent)
           },
           {
             path: 'backups',
+            canActivate: [permissionGuard('admin.backups.read')],
             loadComponent: () =>
               import('./features/admin/backups.component')
                 .then(module => module.BackupsComponent)
           },
           {
             path: 'audit-logs',
+            canActivate: [permissionGuard('admin.audit.read')],
             loadComponent: () =>
               import('./features/admin/audit-logs.component')
                 .then(module => module.AuditLogsComponent)
@@ -215,7 +226,8 @@ export const routes: Routes = [
             'system-settings',
             'Cấu hình hệ thống',
             ['key', 'value', 'group', 'description'],
-            'Quản lý tham số vận hành và cấu hình nghiệp vụ.'
+            'Quản lý tham số vận hành và cấu hình nghiệp vụ.',
+            'admin.settings.manage'
           ),
 
           {
@@ -308,11 +320,8 @@ export const routes: Routes = [
       {
         path: 'profile',
         loadComponent: () =>
-          import('./features/common/simple-page.component')
-            .then(module => module.SimplePageComponent),
-        data: {
-          title: 'Hồ sơ cá nhân'
-        }
+          import('./features/common/profile.component')
+            .then(module => module.ProfileComponent)
       },
       {
         path: 'notifications',
