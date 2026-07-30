@@ -1,0 +1,436 @@
+<section class="review-page">
+  <app-page-header
+    title="Duyệt và công bố bảng điểm"
+    subtitle="Kiểm tra dữ liệu giảng viên đã gửi, trả lại khi có lỗi hoặc công bố cho sinh viên.">
+
+    <button
+      class="review-button review-button--secondary"
+      type="button"
+      [disabled]="loading()"
+      (click)="load()">
+      <span class="material-symbols-outlined">refresh</span>
+      Làm mới
+    </button>
+  </app-page-header>
+
+  <section class="summary-grid">
+    <article class="summary-card">
+      <span class="summary-card__icon material-symbols-outlined">
+        pending_actions
+      </span>
+      <div>
+        <strong>{{ totalItems }}</strong>
+        <span>Bảng điểm theo bộ lọc</span>
+      </div>
+    </article>
+
+    <article class="summary-card summary-card--success">
+      <span class="summary-card__icon material-symbols-outlined">
+        verified
+      </span>
+      <div>
+        <strong>{{ readyCount() }}</strong>
+        <span>Sẵn sàng công bố</span>
+      </div>
+    </article>
+
+    <article class="summary-card summary-card--danger">
+      <span class="summary-card__icon material-symbols-outlined">
+        error
+      </span>
+      <div>
+        <strong>{{ invalidCount() }}</strong>
+        <span>Sinh viên có lỗi</span>
+      </div>
+    </article>
+
+    <article class="summary-card summary-card--warning">
+      <span class="summary-card__icon material-symbols-outlined">
+        warning
+      </span>
+      <div>
+        <strong>{{ warningCount() }}</strong>
+        <span>Điểm cần xác nhận</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="review-panel filter-panel">
+    <div class="filter-field filter-field--search">
+      <label for="gradebook-search">Tìm kiếm</label>
+      <div class="search-box">
+        <span class="material-symbols-outlined">search</span>
+        <input
+          id="gradebook-search"
+          type="search"
+          [(ngModel)]="search"
+          placeholder="Mã lớp, môn học hoặc giảng viên"
+          (keyup.enter)="load(true)">
+      </div>
+    </div>
+
+    <div class="filter-field">
+      <label for="gradebook-status">Trạng thái</label>
+      <select
+        id="gradebook-status"
+        [(ngModel)]="status"
+        (ngModelChange)="load(true)">
+        <option value="Submitted">Chờ duyệt</option>
+        <option value="Draft">Bản nháp</option>
+        <option value="Published">Đã công bố</option>
+        <option value="Locked">Đã khóa</option>
+        <option value="All">Tất cả</option>
+      </select>
+    </div>
+
+    <button
+      class="review-button review-button--primary filter-submit"
+      type="button"
+      (click)="load(true)">
+      Lọc dữ liệu
+    </button>
+  </section>
+
+  <section class="review-panel list-panel">
+    <header class="panel-heading">
+      <div>
+        <h2>Danh sách bảng điểm</h2>
+        <p>
+          Ưu tiên kiểm tra các bảng điểm có trạng thái Chờ duyệt.
+        </p>
+      </div>
+    </header>
+
+    <div class="table-wrapper">
+      <table class="review-table">
+        <thead>
+          <tr>
+            <th>Lớp học phần</th>
+            <th>Môn học</th>
+            <th>Giảng viên</th>
+            <th>Học kỳ</th>
+            <th>Sinh viên</th>
+            <th>Kiểm tra</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @if (loading()) {
+            <tr>
+              <td colspan="8" class="table-state">
+                Đang tải danh sách...
+              </td>
+            </tr>
+          } @else {
+            @for (
+              item of items();
+              track item.classSectionId
+            ) {
+              <tr>
+                <td>
+                  <strong>{{ item.classSectionCode }}</strong>
+                  <small>{{ item.academicYearName }}</small>
+                </td>
+
+                <td>
+                  <strong>{{ item.courseName }}</strong>
+                  <small>{{ item.courseCode }}</small>
+                </td>
+
+                <td>
+                  <span>{{ item.lecturerName }}</span>
+                  <small>{{ item.lecturerCode }}</small>
+                </td>
+
+                <td>{{ item.semesterName }}</td>
+
+                <td>
+                  <strong>
+                    {{ item.completedStudentCount }}
+                    /
+                    {{ item.studentCount }}
+                  </strong>
+                  <small>hợp lệ</small>
+                </td>
+
+                <td>
+                  <div class="check-stack">
+                    @if (item.invalidStudentCount > 0) {
+                      <span class="check-tag check-tag--danger">
+                        {{ item.invalidStudentCount }} lỗi
+                      </span>
+                    }
+
+                    @if (item.confirmationWarningCount > 0) {
+                      <span class="check-tag check-tag--warning">
+                        {{ item.confirmationWarningCount }} cảnh báo
+                      </span>
+                    }
+
+                    @if (item.readyToPublish) {
+                      <span class="check-tag check-tag--success">
+                        Sẵn sàng
+                      </span>
+                    }
+                  </div>
+                </td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    [attr.data-status]="item.status">
+                    {{ statusLabel(item.status) }}
+                  </span>
+                  <small>
+                    {{ item.updatedAt | date:'dd/MM/yyyy HH:mm' }}
+                  </small>
+                </td>
+
+                <td>
+                  <button
+                    class="review-button review-button--small"
+                    type="button"
+                    (click)="open(item)">
+                    Xem và duyệt
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8" class="table-state">
+                  Không có bảng điểm phù hợp bộ lọc.
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="pagination">
+      <span>
+        Trang {{ pageNumber }}
+        /
+        {{ totalPages || 1 }}
+        · {{ totalItems }} bản ghi
+      </span>
+
+      <div>
+        <button
+          class="review-button review-button--secondary"
+          type="button"
+          [disabled]="pageNumber <= 1 || loading()"
+          (click)="previousPage()">
+          Trước
+        </button>
+
+        <button
+          class="review-button review-button--secondary"
+          type="button"
+          [disabled]="pageNumber >= totalPages || loading()"
+          (click)="nextPage()">
+          Sau
+        </button>
+      </div>
+    </footer>
+  </section>
+
+  @if (detailLoading()) {
+    <div class="detail-backdrop">
+      <section class="detail-dialog detail-dialog--loading">
+        Đang tải chi tiết bảng điểm...
+      </section>
+    </div>
+  }
+
+  @if (detail(); as selected) {
+    <div
+      class="detail-backdrop"
+      (click)="closeDetail()">
+
+      <section
+        class="detail-dialog"
+        (click)="$event.stopPropagation()">
+
+        <header class="detail-header">
+          <div>
+            <span class="detail-eyebrow">
+              {{ selected.classSectionCode }}
+            </span>
+            <h2>{{ selected.courseName }}</h2>
+            <p>
+              {{ selected.lecturerName }}
+              · {{ selected.semesterName }}
+              · {{ selected.academicYearName }}
+            </p>
+          </div>
+
+          <button
+            class="detail-close"
+            type="button"
+            aria-label="Đóng"
+            [disabled]="working()"
+            (click)="closeDetail()">
+            ×
+          </button>
+        </header>
+
+        <section class="detail-summary">
+          <div>
+            <strong>{{ selected.students.length }}</strong>
+            <span>Sinh viên</span>
+          </div>
+          <div>
+            <strong>{{ selected.completedStudentCount }}</strong>
+            <span>Hợp lệ</span>
+          </div>
+          <div class="danger-value">
+            <strong>{{ selected.invalidStudentCount }}</strong>
+            <span>Có lỗi</span>
+          </div>
+          <div class="warning-value">
+            <strong>{{ selected.confirmationWarningCount }}</strong>
+            <span>Cần xác nhận</span>
+          </div>
+        </section>
+
+        @if (!selected.readyToPublish) {
+          <div class="detail-alert">
+            <span class="material-symbols-outlined">warning</span>
+            <div>
+              <strong>Chưa đủ điều kiện công bố</strong>
+              <p>
+                Kiểm tra các dòng có cảnh báo hoặc trả bảng điểm
+                lại cho giảng viên để sửa.
+              </p>
+            </div>
+          </div>
+        }
+
+        <div class="detail-table-wrapper">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th>Mã SV</th>
+                <th>Họ và tên</th>
+
+                @for (
+                  component of selected.components;
+                  track component.componentId
+                ) {
+                  <th>
+                    {{ component.componentName }}
+                    <small>
+                      {{ component.weight }}%
+                    </small>
+                  </th>
+                }
+
+                <th>Tổng kết</th>
+                <th>Điểm chữ</th>
+                <th>Kết quả kiểm tra</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              @for (
+                student of selected.students;
+                track student.studentId
+              ) {
+                <tr
+                  [class.invalid-row]="
+                    student.validationMessages.length > 0
+                  ">
+                  <td>{{ student.studentCode }}</td>
+                  <td class="student-name">
+                    {{ student.fullName }}
+                  </td>
+
+                  @for (
+                    component of selected.components;
+                    track component.componentId
+                  ) {
+                    <td class="score-cell">
+                      @if (
+                        score(student, component.componentId) !== null
+                        && score(student, component.componentId)
+                          !== undefined
+                      ) {
+                        {{
+                          score(student, component.componentId)
+                            | number:'1.0-2'
+                        }}
+                      } @else {
+                        <span class="missing-score">—</span>
+                      }
+                    </td>
+                  }
+
+                  <td>
+                    <strong>
+                      {{ student.finalScore | number:'1.2-2' }}
+                    </strong>
+                  </td>
+                  <td>{{ student.letterGrade }}</td>
+                  <td>
+                    @if (
+                      student.validationMessages.length === 0
+                    ) {
+                      <span class="check-tag check-tag--success">
+                        Hợp lệ
+                      </span>
+                    } @else {
+                      <ul class="validation-list">
+                        @for (
+                          message of student.validationMessages;
+                          track message
+                        ) {
+                          <li>{{ message }}</li>
+                        }
+                      </ul>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <footer class="detail-actions">
+          <button
+            class="review-button review-button--secondary"
+            type="button"
+            [disabled]="working()"
+            (click)="closeDetail()">
+            Đóng
+          </button>
+
+          <button
+            class="review-button review-button--danger"
+            type="button"
+            [disabled]="
+              working()
+              || selected.status !== 'Submitted'
+            "
+            (click)="returnToLecturer()">
+            Trả lại giảng viên
+          </button>
+
+          <button
+            class="review-button review-button--primary"
+            type="button"
+            [disabled]="working() || !selected.readyToPublish"
+            (click)="publish()">
+            {{
+              working()
+                ? 'Đang xử lý...'
+                : 'Công bố bảng điểm'
+            }}
+          </button>
+        </footer>
+      </section>
+    </div>
+  }
+</section>

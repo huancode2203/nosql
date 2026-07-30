@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from '../core/services/api.service';
 import { AuthService } from '../core/services/auth.service';
@@ -69,6 +69,7 @@ export class AppLayoutComponent implements OnInit {
         { label: 'Học kỳ', icon: 'calendar_view_month', route: '/admin/semesters' },
         { label: 'Môn học', icon: 'menu_book', route: '/admin/courses' },
         { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections' },
+        { label: 'Duyệt bảng điểm', icon: 'fact_check', route: '/admin/gradebooks', description: 'Kiểm tra và công bố điểm' },
         { label: 'Cấu trúc điểm & CLO', icon: 'rule', route: '/admin/grading-schemes' },
         { label: 'Thông báo', icon: 'notifications', route: '/admin/notifications' },
         { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports' },

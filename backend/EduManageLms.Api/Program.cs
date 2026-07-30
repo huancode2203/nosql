@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using EduManageLms.Api.Application;
 using EduManageLms.Api.Hubs;
 using EduManageLms.Api.Infrastructure;
@@ -37,6 +37,7 @@ builder.Services.AddScoped<AdminGradePublicationService>();
 builder.Services.AddScoped<IAdminResourceService, AdminResourceService>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<IAdminAcademicService, AdminAcademicService>();
+builder.Services.AddScoped<AdminAcademicService>();
 builder.Services.AddScoped<ILecturerPortalService, LecturerPortalService>();
 builder.Services.AddScoped<IStudentPortalService, StudentPortalService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();

@@ -180,8 +180,9 @@
                           || book.status === 'Published'
                           || book.status === 'Locked'
                         "
-                        [(ngModel)]="
+                        [value]="
                           student.scores[component.componentId]
+                          ?? ''
                         "
                         (keydown)="blockInvalidScoreKey($event)"
                         (beforeinput)="
@@ -189,11 +190,11 @@
                         "
                         (paste)="handleScorePaste($event)"
                         (drop)="blockScoreDrop($event)"
-                        (ngModelChange)="
+                        (input)="
                           trackScoreInput(
+                            $event,
                             student,
-                            component.componentId,
-                            $event
+                            component.componentId
                           )
                         "
                         (blur)="

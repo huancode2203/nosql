@@ -66,19 +66,41 @@ public sealed record GradebookDto(
     IReadOnlyCollection<GradebookComponentDto> Components,
     IReadOnlyCollection<GradebookStudentDto> Students);
 
-public sealed record GradeUpdateStudent(
-    string StudentId,
-    Dictionary<string, string?> Scores,
-    IReadOnlyCollection<string>? ConfirmedComponents = null,
-    int? Version = null)
+public sealed class GradeUpdateStudent
 {
-    // Tương thích import Excel cũ đang tạo Dictionary<string, double?>.
-    public GradeUpdateStudent(string studentId, Dictionary<string, double?> scores)
+    public string StudentId { get; set; } = "";
+    public Dictionary<string, string?> Scores { get; set; } = new();
+    public IReadOnlyCollection<string>? ConfirmedComponents { get; set; }
+    public int? Version { get; set; }
+
+    // Constructor rỗng để System.Text.Json deserialize request ổn định.
+    public GradeUpdateStudent()
+    {
+    }
+
+    public GradeUpdateStudent(
+        string studentId,
+        Dictionary<string, string?> scores,
+        IReadOnlyCollection<string>? confirmedComponents = null,
+        int? version = null)
+    {
+        StudentId = studentId;
+        Scores = scores;
+        ConfirmedComponents = confirmedComponents;
+        Version = version;
+    }
+
+    // Giữ tương thích với luồng import Excel cũ.
+    public GradeUpdateStudent(
+        string studentId,
+        Dictionary<string, double?> scores)
         : this(
             studentId,
             scores.ToDictionary(
                 item => item.Key,
-                item => item.Value?.ToString("0.################", CultureInfo.InvariantCulture)),
+                item => item.Value?.ToString(
+                    "0.################",
+                    CultureInfo.InvariantCulture)),
             null,
             null)
     {

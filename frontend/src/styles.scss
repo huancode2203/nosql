@@ -1356,3 +1356,44 @@ textarea {
 }
 /* EDU_FONT_PATCH_END */
 
+/* EDU_GRADEBOOK_BUGFIX_START */
+.result-table td.final-score.final-score-column {
+  display: table-cell !important;
+  position: static !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  margin: 0 !important;
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  padding: 7px 10px !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  vertical-align: middle !important;
+  line-height: normal !important;
+}
+
+.result-table tr.failed-row td.final-score.final-score-column {
+  background: #fff8f7 !important;
+}
+
+.result-table td.final-score.final-score-column::before,
+.result-table td.final-score.final-score-column::after {
+  display: none !important;
+  content: none !important;
+}
+
+.toast-stack {
+  width: min(380px, calc(100vw - 32px));
+}
+
+.toast {
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+/* EDU_GRADEBOOK_BUGFIX_END */

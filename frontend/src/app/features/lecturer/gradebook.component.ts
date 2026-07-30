@@ -1,4 +1,4 @@
-﻿import { Component, OnInit, input, signal } from '@angular/core';
+import { Component, OnInit, input, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
@@ -92,34 +92,34 @@ export class GradebookComponent implements OnInit {
   }
 
   trackScoreInput(
+    event: Event,
     row: StudentRow,
-    key: string,
-    value: unknown
+    key: string
   ) {
-    const raw = String(value ?? '').replace(/\s+/g, '');
+    const input = event.target as HTMLInputElement;
+    const original = input.value;
+    const sanitized = this.sanitizeScoreText(original);
+
+    if (original !== sanitized) {
+      input.value = sanitized;
+    }
 
     row.rawScores ??= {};
     row.errors ??= {};
     row.notes ??= {};
     row.confirmedComponents ??= [];
 
-    if (!this.isAllowedScoreText(raw)) {
-      row.scores[key] = row.rawScores[key] ?? null;
-      row.errors[key] = 'Chá»‰ Ä‘Æ°á»£c nháº­p chá»¯ sá»‘ vÃ  má»™t dáº¥u pháº©y hoáº·c dáº¥u cháº¥m.';
-      delete row.notes[key];
-
-      this.toast.show(
-        'Ã” Ä‘iá»ƒm chá»‰ cho phÃ©p nháº­p sá»‘.',
-        'error'
-      );
-      return;
-    }
-
-    row.rawScores[key] = raw;
-    row.scores[key] = raw;
+    row.rawScores[key] = sanitized;
+    row.scores[key] = sanitized;
     row.dirty = true;
 
-    delete row.errors[key];
+    if (original !== sanitized) {
+      row.errors[key] =
+        'Chỉ được nhập chữ số và tối đa một dấu phẩy hoặc dấu chấm.';
+    } else {
+      delete row.errors[key];
+    }
+
     delete row.notes[key];
   }
 
@@ -153,7 +153,7 @@ export class GradebookComponent implements OnInit {
       if (preview.requiresConfirmation) {
         const accepted = window.confirm(
           preview.warning
-          ?? 'GiÃ¡ trá»‹ nÃ y cáº§n Ä‘Æ°á»£c xÃ¡c nháº­n trÆ°á»›c khi lÆ°u.'
+          ?? 'Giá trị này cần được xác nhận trước khi lưu.'
         );
 
         if (accepted) {
@@ -163,7 +163,7 @@ export class GradebookComponent implements OnInit {
         } else {
           row.confirmedComponents =
             row.confirmedComponents.filter(item => item !== key);
-          row.errors[key] = 'GiÃ¡ trá»‹ chÆ°a Ä‘Æ°á»£c xÃ¡c nháº­n.';
+          row.errors[key] = 'Giá trị chưa được xác nhận.';
         }
       } else {
         row.confirmedComponents =
@@ -260,9 +260,15 @@ export class GradebookComponent implements OnInit {
 
     if (!this.isAllowedScoreText(pasted)) {
       event.preventDefault();
-      this.toast.show(
-        'KhÃ´ng thá»ƒ dÃ¡n dá»¯ liá»‡u cÃ³ chá»¯ hoáº·c kÃ½ tá»± khÃ´ng há»£p lá»‡ vÃ o Ã´ Ä‘iá»ƒm.',
-        'error'
+
+      const input = event.target as HTMLInputElement;
+      const sanitized = this.sanitizeScoreText(pasted);
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+
+      input.setRangeText(sanitized, start, end, 'end');
+      input.dispatchEvent(
+        new Event('input', { bubbles: true })
       );
     }
   }
@@ -273,12 +279,12 @@ export class GradebookComponent implements OnInit {
 
   statusLabel(status: string) {
     const labels: Record<string, string> = {
-      Draft: 'Báº£n nhÃ¡p',
-      InProgress: 'Äang nháº­p Ä‘iá»ƒm',
-      Reopened: 'ÄÃ£ má»Ÿ láº¡i',
-      Submitted: 'ÄÃ£ gá»­i duyá»‡t',
-      Published: 'ÄÃ£ cÃ´ng bá»‘',
-      Locked: 'ÄÃ£ khÃ³a'
+      Draft: 'Bản nháp',
+      InProgress: 'Đang nhập điểm',
+      Reopened: 'Đã mở lại',
+      Submitted: 'Đã gửi duyệt',
+      Published: 'Đã công bố',
+      Locked: 'Đã khóa'
     };
 
     return labels[status] ?? status;
@@ -286,6 +292,26 @@ export class GradebookComponent implements OnInit {
 
   private isAllowedScoreText(value: string) {
     return /^\d*(?:[.,]\d*)?$/.test(value);
+  }
+
+  private sanitizeScoreText(value: string) {
+    const compact = value.replace(/\s+/g, '');
+    let result = '';
+    let separatorUsed = false;
+
+    for (const character of compact) {
+      if (/\d/.test(character)) {
+        result += character;
+        continue;
+      }
+
+      if ((character === '.' || character === ',') && !separatorUsed) {
+        result += character;
+        separatorUsed = true;
+      }
+    }
+
+    return result.slice(0, 8);
   }
 
   private previewNormalize(
@@ -304,7 +330,7 @@ export class GradebookComponent implements OnInit {
     if (/[-eE]/.test(raw)) {
       return {
         value: null,
-        error: 'KhÃ´ng cho phÃ©p Ä‘iá»ƒm Ã¢m hoáº·c dáº¡ng sá»‘ khoa há»c.'
+        error: 'Không cho phép điểm âm hoặc dạng số khoa học.'
       };
     }
 
@@ -314,7 +340,7 @@ export class GradebookComponent implements OnInit {
         displayValue: '7,1',
         requiresConfirmation: true,
         warning:
-          'Há»‡ thá»‘ng Ä‘Ã£ chuáº©n hÃ³a â€œ0700â€ thÃ nh â€œ7,1â€. Vui lÃ²ng xÃ¡c nháº­n trÆ°á»›c khi lÆ°u.'
+          'Hệ thống đã chuẩn hóa “0700” thành “7,1”. Vui lòng xác nhận trước khi lưu.'
       };
     }
 
@@ -328,7 +354,7 @@ export class GradebookComponent implements OnInit {
     if (!/^\d+$/.test(raw)) {
       return {
         value: null,
-        error: 'Äiá»ƒm khÃ´ng há»£p lá»‡.'
+        error: 'Điểm không hợp lệ.'
       };
     }
 
@@ -349,7 +375,7 @@ export class GradebookComponent implements OnInit {
         warning:
           shortened === raw
             ? undefined
-            : `ÄÃ£ chuáº©n hÃ³a tá»« ${raw} thÃ nh 10.`
+            : `Đã chuẩn hóa từ ${raw} thành 10.`
       };
     }
 
@@ -363,7 +389,7 @@ export class GradebookComponent implements OnInit {
         warning:
           shortened === raw
             ? undefined
-            : `ÄÃ£ chuáº©n hÃ³a tá»« ${raw} thÃ nh ${this.formatScore(value)}.`
+            : `Đã chuẩn hóa từ ${raw} thành ${this.formatScore(value)}.`
       };
     }
 
@@ -374,7 +400,7 @@ export class GradebookComponent implements OnInit {
 
     return {
       value: null,
-      error: 'KhÃ´ng thá»ƒ chuáº©n hÃ³a giÃ¡ trá»‹ nÃ y.'
+      error: `Điểm phải nằm trong khoảng 0 đến ${Math.min(10, maxScore)}.`
     };
   }
 
@@ -387,7 +413,7 @@ export class GradebookComponent implements OnInit {
     if (!Number.isFinite(value) || value < 0 || value > upperBound) {
       return {
         value: null,
-        error: `Äiá»ƒm pháº£i tá»« 0 Ä‘áº¿n ${upperBound}.`
+        error: `Điểm phải từ 0 đến ${upperBound}.`
       };
     }
 
@@ -445,13 +471,13 @@ export class GradebookComponent implements OnInit {
       : book.students.filter(row => row.dirty);
 
     if (!rows.length) {
-      this.toast.show('ChÆ°a cÃ³ Ã´ Ä‘iá»ƒm nÃ o thay Ä‘á»•i', 'info');
+      this.toast.show('Chưa có ô điểm nào thay đổi', 'info');
       return;
     }
 
     if (rows.some(row => Object.keys(row.errors ?? {}).length > 0)) {
       this.toast.show(
-        'CÃ²n Ã´ Ä‘iá»ƒm khÃ´ng há»£p lá»‡ hoáº·c chÆ°a Ä‘Æ°á»£c xÃ¡c nháº­n',
+        'Còn ô điểm không hợp lệ hoặc chưa được xác nhận',
         'error'
       );
       return;
@@ -476,8 +502,8 @@ export class GradebookComponent implements OnInit {
       next: () => {
         this.toast.show(
           submit
-            ? 'ÄÃ£ gá»­i báº£ng Ä‘iá»ƒm Ä‘á»ƒ quáº£n trá»‹ viÃªn kiá»ƒm tra'
-            : 'ÄÃ£ lÆ°u báº£n nhÃ¡p',
+            ? 'Đã gửi bảng điểm để quản trị viên kiểm tra'
+            : 'Đã lưu bản nháp',
           'success'
         );
 
@@ -492,7 +518,7 @@ export class GradebookComponent implements OnInit {
       },
       error: error => {
         this.toast.show(
-          error.error?.message || 'LÆ°u Ä‘iá»ƒm tháº¥t báº¡i',
+          error.error?.message || 'Lưu điểm thất bại',
           'error'
         );
         this.saving.set(false);
@@ -534,7 +560,7 @@ export class GradebookComponent implements OnInit {
       },
       error: error =>
         this.toast.show(
-          error.error?.message || 'KhÃ´ng thá»ƒ Ä‘á»c file',
+          error.error?.message || 'Không thể đọc file',
           'error'
         )
     });
@@ -552,13 +578,13 @@ export class GradebookComponent implements OnInit {
       { commit: true }
     ).subscribe({
       next: () => {
-        this.toast.show('Import Ä‘iá»ƒm thÃ nh cÃ´ng', 'success');
+        this.toast.show('Import điểm thành công', 'success');
         this.importModal.set(false);
         this.load();
       },
       error: error =>
         this.toast.show(
-          error.error?.message || 'Import tháº¥t báº¡i',
+          error.error?.message || 'Import thất bại',
           'error'
         )
     });
@@ -569,8 +595,8 @@ export class GradebookComponent implements OnInit {
     if (!book) return;
 
     const reason = prompt(
-      'LÃ½ do yÃªu cáº§u má»Ÿ láº¡i báº£ng Ä‘iá»ƒm',
-      'Cáº§n Ä‘iá»u chá»‰nh Ä‘iá»ƒm sau rÃ  soÃ¡t'
+      'Lý do yêu cầu mở lại bảng điểm',
+      'Cần điều chỉnh điểm sau rà soát'
     );
 
     if (!reason) return;
@@ -581,12 +607,12 @@ export class GradebookComponent implements OnInit {
     ).subscribe({
       next: () =>
         this.toast.show(
-          'ÄÃ£ gá»­i yÃªu cáº§u Ä‘áº¿n quáº£n trá»‹ viÃªn',
+          'Đã gửi yêu cầu đến quản trị viên',
           'success'
         ),
       error: error =>
         this.toast.show(
-          error.error?.message || 'KhÃ´ng thá»ƒ gá»­i yÃªu cáº§u',
+          error.error?.message || 'Không thể gửi yêu cầu',
           'error'
         )
     });
@@ -601,4 +627,3 @@ export class GradebookComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 }
-
