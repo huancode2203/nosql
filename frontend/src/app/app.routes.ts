@@ -252,28 +252,46 @@ export const routes: Routes = [
                 .then(module => module.DashboardComponent)
           },
           {
+            path: 'classes',
+            loadComponent: () =>
+              import('./features/lecturer/classes.component')
+                .then(module => module.LecturerClassesComponent)
+          },
+          {
+            path: 'grades/:id',
+            loadComponent: () =>
+              import('./features/lecturer/gradebook.component')
+                .then(module => module.GradebookComponent)
+          },
+          {
             path: 'grades',
             loadComponent: () =>
               import('./features/lecturer/gradebook.component')
                 .then(module => module.GradebookComponent)
           },
           {
-            path: ':section',
+            path: 'materials',
             loadComponent: () =>
-              import('./features/common/simple-page.component')
-                .then(module => module.SimplePageComponent),
-            data: {
-              title: 'Không gian giảng viên'
-            }
+              import('./features/lecturer/materials.component')
+                .then(module => module.LecturerMaterialsComponent)
+          },
+          {
+            path: 'assignments',
+            loadComponent: () =>
+              import('./features/lecturer/assignments.component')
+                .then(module => module.LecturerAssignmentsComponent)
           },
           {
             path: '',
             pathMatch: 'full',
             redirectTo: 'dashboard'
+          },
+          {
+            path: '**',
+            redirectTo: 'dashboard'
           }
         ]
-      },
-      {
+      },      {
         path: 'student',
         canActivate: [roleGuard(['Student'])],
         children: [
@@ -302,22 +320,46 @@ export const routes: Routes = [
                 .then(module => module.GpaComponent)
           },
           {
-            path: ':section',
+            path: 'curriculum',
             loadComponent: () =>
-              import('./features/common/simple-page.component')
-                .then(module => module.SimplePageComponent),
-            data: {
-              title: 'Không gian sinh viên'
-            }
+              import('./features/student/curriculum.component')
+                .then(module => module.CurriculumComponent)
+          },
+          {
+            path: 'current-courses',
+            loadComponent: () =>
+              import('./features/student/current-courses.component')
+                .then(module => module.StudentCurrentCoursesComponent)
+          },
+          {
+            path: 'schedule',
+            loadComponent: () =>
+              import('./features/student/schedule.component')
+                .then(module => module.StudentScheduleComponent)
+          },
+          {
+            path: 'materials',
+            loadComponent: () =>
+              import('./features/student/materials.component')
+                .then(module => module.StudentMaterialsComponent)
+          },
+          {
+            path: 'assignments',
+            loadComponent: () =>
+              import('./features/student/assignments.component')
+                .then(module => module.StudentAssignmentsComponent)
           },
           {
             path: '',
             pathMatch: 'full',
             redirectTo: 'dashboard'
+          },
+          {
+            path: '**',
+            redirectTo: 'dashboard'
           }
         ]
-      },
-      {
+      },      {
         path: 'profile',
         loadComponent: () =>
           import('./features/common/profile.component')

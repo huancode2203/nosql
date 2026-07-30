@@ -1,19 +1,442 @@
-<app-page-header title="Chi tiết kết quả học tập" subtitle="Xem điểm thành phần, công thức tính và kết quả từng môn.">
-  <button class="secondary-button" type="button" (click)="exportTranscript()"><span class="material-symbols-outlined">download</span> Xuất Excel</button>
+<app-page-header
+  title="Kết quả học tập"
+  subtitle="Bảng điểm toàn khóa theo học kỳ và chương trình đào tạo.">
+  <button
+    class="primary-button"
+    type="button"
+    (click)="exportTranscript()">
+    <span class="material-symbols-outlined">download</span>
+    Xuất Excel
+  </button>
 </app-page-header>
-<section class="academic-filter-bar panel compact-filters">
-  <label>Tìm môn học<div class="filter-input"><span class="material-symbols-outlined">search</span><input type="search" placeholder="Mã môn, tên môn, giảng viên..." [value]="search()" (input)="search.set($any($event.target).value)" /></div></label>
-  <span class="status-chip">{{ filteredGrades().length }} học phần đã công bố</span>
-</section>
-<section class="course-grade-grid">
-  @for (grade of filteredGrades(); track grade.courseId + grade.classSectionCode) {
-    <article class="course-card" (click)="selected.set(grade)">
-      <div class="course-top"><div><span>{{ grade.courseCode }} · {{ grade.credits }} tín chỉ</span><h3>{{ grade.courseName }}</h3><p>{{ grade.classSectionCode }} · {{ grade.lecturerName }}</p></div><div class="score-ring" [class.fail]="!grade.passed"><b>{{ grade.finalScore }}</b><span>{{ grade.letterGrade }}</span></div></div>
-      <div class="score-components">@for (score of grade.scores; track score.componentId) { <div><span>{{ score.componentName }} ({{ score.weight }}%)</span><b>{{ score.score ?? '—' }}/{{ score.maxScore }}</b></div> }</div>
-      <footer><span class="badge" [class.success]="grade.passed" [class.danger]="!grade.passed">{{ grade.passed ? 'Đạt' : 'Không đạt' }}</span><button type="button" class="text-button">Xem công thức</button></footer>
-    </article>
-  } @empty { <article class="panel empty-state"><span class="material-symbols-outlined">grading</span><h3>Chưa có bảng điểm được công bố</h3></article> }
-</section>
-@if (selected(); as grade) {
-  <div class="modal-backdrop" (click)="selected.set(null)"><article class="modal score-detail" (click)="$event.stopPropagation()"><div class="modal-heading"><div><span class="eyebrow">CHI TIẾT ĐIỂM</span><h3>{{ grade.courseName }}</h3></div><button type="button" class="icon-button" (click)="selected.set(null)"><span class="material-symbols-outlined">close</span></button></div><div class="formula-box"><span>Công thức từ cấu trúc điểm của môn học</span><code>{{ formula(grade) }} = {{ grade.finalScore }}</code></div><div class="detail-list">@for (score of grade.scores; track score.componentId) { <div><span>{{ score.componentName }}</span><b>{{ score.score ?? 'Chưa có' }} / {{ score.maxScore }}</b><small>Trọng số {{ score.weight }}%</small></div> }</div><div class="result-summary"><div><span>Điểm thang 10</span><b>{{ grade.finalScore }}</b></div><div><span>Điểm chữ</span><b>{{ grade.letterGrade }}</b></div><div><span>Điểm hệ 4</span><b>{{ grade.gradePoint }}</b></div></div></article></div>
+
+@if (loading()) {
+  <article class="panel page-state">
+    <span class="material-symbols-outlined spin">
+      progress_activity
+    </span>
+    <strong>Đang tải kết quả học tập...</strong>
+  </article>
+} @else if (error()) {
+  <article class="panel page-state error-state">
+    <span class="material-symbols-outlined">error</span>
+    <strong>{{ error() }}</strong>
+  </article>
+} @else {
+  <section class="panel outcomes-panel">
+    <div class="section-caption">
+      CHUẨN ĐẦU RA
+    </div>
+
+    <div class="wide-table-scroll">
+      <table class="outcome-table">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Loại chứng chỉ</th>
+            <th>Theo quy định</th>
+            <th>Đã nộp</th>
+            <th>Xác nhận</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (
+            outcome of outcomes;
+            track outcome.order
+          ) {
+            <tr>
+              <td>{{ outcome.order }}</td>
+              <td>{{ outcome.type }}</td>
+              <td>{{ outcome.regulation }}</td>
+              <td>{{ outcome.submitted }}</td>
+              <td>
+                <span
+                  class="outcome-status"
+                  [class.completed]="outcome.confirmed">
+                  {{
+                    outcome.confirmed
+                      ? 'Hoàn tất'
+                      : 'Chưa hoàn tất'
+                  }}
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel transcript-shell">
+    <div class="transcript-heading">
+      <div>
+        <span class="eyebrow">
+          BẢNG ĐIỂM TOÀN KHÓA
+        </span>
+        <h2>Kết quả theo từng học kỳ</h2>
+      </div>
+
+      <div class="transcript-legend">
+        <span>
+          <i class="legend-dot passed"></i>
+          Đạt
+        </span>
+        <span>
+          <i class="legend-dot failed"></i>
+          Không đạt
+        </span>
+        <span>
+          Nhấp biểu tượng cuối dòng để xem công thức
+        </span>
+      </div>
+    </div>
+
+    <div #transcriptScroll class="wide-table-scroll transcript-scroll">
+      <table class="academic-transcript-table">
+        <colgroup>
+          <col class="w-stt">
+          <col class="w-code">
+          <col class="w-name">
+          <col class="w-class">
+          <col class="w-credit">
+          <col class="w-score">
+          <col class="w-score">
+          <col class="w-score">
+          <col class="w-score">
+          <col class="w-score">
+          <col class="w-score">
+          <col class="w-regular">
+          <col class="w-final">
+          <col class="w-total">
+          <col class="w-grade4">
+          <col class="w-letter">
+          <col class="w-rank">
+          <col class="w-pass">
+          <col class="w-clo">
+          <col class="w-note">
+          <col class="w-detail">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="sticky-col col-stt" rowspan="3">STT</th>
+            <th class="sticky-col col-code" rowspan="3">Mã môn học</th>
+            <th class="sticky-col col-name" rowspan="3">Tên môn học / học phần</th>
+            <th class="sticky-col col-class" rowspan="3">Lớp dự kiến</th>
+            <th class="sticky-col col-credit" rowspan="3">Số tín chỉ</th>
+            <th colspan="2">Giữa kỳ</th>
+            <th colspan="2">Thường xuyên</th>
+            <th colspan="2">TL/BTL</th>
+            <th rowspan="3">TB<br>thường kỳ</th>
+            <th rowspan="3">Cuối kỳ</th>
+            <th rowspan="3">Điểm<br>tổng kết</th>
+            <th rowspan="3">Thang<br>điểm 4</th>
+            <th rowspan="3">Điểm<br>chữ</th>
+            <th rowspan="3">Xếp loại</th>
+            <th rowspan="3">Đạt</th>
+            <th rowspan="3">Đạt chuẩn<br>đầu ra</th>
+            <th rowspan="3">Ghi chú</th>
+            <th rowspan="3" aria-label="Xem công thức"></th>
+          </tr>
+
+          <tr>
+            <th>1</th>
+            <th>2</th>
+            <th>1</th>
+            <th>2</th>
+            <th>Tiểu luận 1</th>
+            <th>Tiểu luận 2</th>
+          </tr>
+
+          <tr>
+            <th colspan="2">Điểm giữa kỳ</th>
+            <th colspan="2">Điểm hệ số / chuyên cần</th>
+            <th colspan="2">Bài tập lớn / tiểu luận</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (
+            term of terms();
+            track term.academicYear + term.semesterCode
+          ) {
+            <tr class="semester-title-row">
+              <td colspan="21">
+                <span class="semester-title-content">
+                  {{ term.semesterCode }}
+                  ({{ term.academicYear }})
+                  · {{ term.semesterName }}
+                </span>
+              </td>
+            </tr>
+
+            @for (
+              course of term.courses;
+              track course.courseId + '-' + course.classSectionCode;
+              let index = $index
+            ) {
+              <tr
+                class="course-result-row"
+                [class.failed-course]="!course.passed">
+                <td class="sticky-col col-stt">{{ index + 1 }}</td>
+                <td class="sticky-col col-code">
+                  <code>{{ course.courseCode }}</code>
+                </td>
+                <td class="sticky-col col-name course-name-cell">
+                  <strong>{{ course.courseName }}</strong>
+                  <small>{{ course.lecturerName }}</small>
+                </td>
+                <td class="sticky-col col-class">
+                  {{ course.classSectionCode }}
+                </td>
+                <td class="sticky-col col-credit">
+                  {{ course.credits }}
+                </td>
+
+                <td>
+                  {{
+                    midtermScore(course) === null
+                      ? ''
+                      : (
+                        midtermScore(course)
+                          | number:'1.1-2'
+                      )
+                  }}
+                </td>
+                <td></td>
+
+                <td>
+                  {{
+                    frequentScore(course) === null
+                      ? ''
+                      : (
+                        frequentScore(course)
+                          | number:'1.1-2'
+                      )
+                  }}
+                </td>
+                <td></td>
+
+                <td>
+                  {{
+                    assignmentScore(course) === null
+                      ? ''
+                      : (
+                        assignmentScore(course)
+                          | number:'1.1-2'
+                      )
+                  }}
+                </td>
+                <td></td>
+
+                <td>
+                  {{
+                    regularAverage(course) === null
+                      ? ''
+                      : (
+                        regularAverage(course)
+                          | number:'1.1-2'
+                      )
+                  }}
+                </td>
+
+                <td>
+                  {{
+                    finalExamScore(course) === null
+                      ? ''
+                      : (
+                        finalExamScore(course)
+                          | number:'1.1-2'
+                      )
+                  }}
+                </td>
+
+                <td class="total-score-cell numeric-cell">
+                  {{ course.finalScore | number:'1.1-2' }}
+                </td>
+
+                <td class="grade4-cell numeric-cell">
+                  {{ course.gradePoint | number:'1.1-2' }}
+                </td>
+
+                <td class="letter-grade-cell">
+                  <span class="letter-badge">
+                    {{ course.letterGrade }}
+                  </span>
+                </td>
+
+                <td class="rank-cell">
+                  {{ classification(course) }}
+                </td>
+
+                <td>
+                  <span
+                    class="result-icon"
+                    [class.passed]="course.passed"
+                    [class.failed]="!course.passed">
+                    <span class="material-symbols-outlined">
+                      {{
+                        course.passed
+                          ? 'check_circle'
+                          : 'cancel'
+                      }}
+                    </span>
+                  </span>
+                </td>
+
+                <td>
+                  <span
+                    class="result-icon"
+                    [class.passed]="course.passed"
+                    [class.failed]="!course.passed">
+                    <span class="material-symbols-outlined">
+                      {{
+                        course.passed
+                          ? 'check_circle'
+                          : 'cancel'
+                      }}
+                    </span>
+                  </span>
+                </td>
+
+                <td class="note-cell">
+                  {{
+                    course.credits === 0
+                      ? 'Không tính vào GPA'
+                      : ''
+                  }}
+                </td>
+
+                <td>
+                  <button
+                    class="icon-button table-detail-button"
+                    type="button"
+                    title="Xem công thức tính"
+                    (click)="toggleCourse(term, course)">
+                    <span class="material-symbols-outlined">
+                      {{
+                        expandedCourseKey()
+                          === courseKey(term, course)
+                          ? 'expand_less'
+                          : 'expand_more'
+                      }}
+                    </span>
+                  </button>
+                </td>
+              </tr>
+
+              @if (
+                expandedCourseKey()
+                  === courseKey(term, course)
+              ) {
+                <tr class="formula-row">
+                  <td colspan="21">
+                    <div>
+                      <span class="material-symbols-outlined">
+                        functions
+                      </span>
+                      <p>
+                        <strong>Công thức tính:</strong>
+                        {{ componentFormula(course) }}
+                        = {{ course.finalScore | number:'1.1-2' }}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr>
+                <td colspan="21" class="empty-row">
+                  Học kỳ này chưa có dữ liệu điểm được công bố.
+                </td>
+              </tr>
+            }
+
+            <tr class="term-summary-row">
+              <td colspan="5">
+                Điểm trung bình học kỳ hệ 10:
+                <strong>
+                  {{ term.average10 | number:'1.2-2' }}
+                </strong>
+              </td>
+              <td colspan="5">
+                Điểm trung bình học kỳ hệ 4:
+                <strong>
+                  {{ term.gpa | number:'1.2-2' }}
+                </strong>
+              </td>
+              <td colspan="5">
+                Tổng tín chỉ học kỳ:
+                <strong>{{ term.totalCredits }}</strong>
+              </td>
+              <td colspan="6">
+                Tín chỉ đã đạt:
+                <strong>{{ term.passedCredits }}</strong>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="21" class="empty-row">
+                Chưa có bảng điểm được công bố.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    id="graduation-summary"
+    class="panel graduation-summary">
+    <div class="summary-column">
+      <h3>Tính theo thực học</h3>
+
+      <dl>
+        <div>
+          <dt>Tổng tín chỉ:</dt>
+          <dd>{{ actualCredits() }}</dd>
+        </div>
+        <div>
+          <dt>Trung bình chung tích lũy:</dt>
+          <dd>
+            {{ cumulativeAverage10() | number:'1.2-2' }}
+            -
+            {{ cumulativeGpa() | number:'1.2-2' }}
+          </dd>
+        </div>
+        <div>
+          <dt>Xếp loại hiện tại:</dt>
+          <dd>{{ graduationStatus() }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="summary-column">
+      <h3>Tính theo chương trình khung</h3>
+
+      <dl>
+        <div>
+          <dt>Tổng tín chỉ đã tích lũy:</dt>
+          <dd>{{ completedCredits() }}</dd>
+        </div>
+        <div>
+          <dt>Số tín chỉ phải tích lũy:</dt>
+          <dd>{{ requiredCredits() }}</dd>
+        </div>
+        <div>
+          <dt>Tiến độ:</dt>
+          <dd>
+            {{ curriculum()?.progressPercent ?? 0 }}%
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <p class="summary-note">
+      <strong>Ghi chú:</strong>
+      Các học phần có 0 tín chỉ hoặc được cấu hình không tính GPA
+      không được cộng vào điểm trung bình chung tích lũy.
+    </p>
+  </section>
 }

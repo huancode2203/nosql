@@ -1,0 +1,339 @@
+:host {
+  display: block;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-action {
+  min-width: 46px;
+  height: 44px;
+  padding-inline: 13px;
+}
+
+.icon-only-action {
+  width: 46px;
+  padding-inline: 0;
+}
+
+.curriculum-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  gap: 10px;
+  padding: 30px;
+}
+
+.error-state {
+  color: #b42318;
+}
+
+.curriculum-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+}
+
+.curriculum-meta h2 {
+  margin: 4px 0;
+  font-size: 19px;
+}
+
+.curriculum-meta p {
+  margin: 0;
+  color: #6b7f92;
+}
+
+.curriculum-progress-card {
+  display: grid;
+  width: min(380px, 42%);
+  gap: 7px;
+}
+
+.curriculum-progress-card span {
+  display: flex;
+  justify-content: space-between;
+  color: #62788b;
+}
+
+.curriculum-progress-card strong {
+  color: #176cae;
+}
+
+.curriculum-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dce8f1;
+}
+
+.curriculum-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #1498ea;
+}
+
+.curriculum-progress-card small {
+  color: #62788b;
+  text-align: right;
+}
+
+.curriculum-table-panel {
+  overflow: hidden;
+  margin-bottom: 14px;
+  padding: 0;
+}
+
+.curriculum-table-scroll {
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.curriculum-framework-table {
+  width: 100%;
+  min-width: 1410px;
+  border-collapse: collapse;
+  background: #fff;
+  table-layout: fixed;
+}
+
+.curriculum-framework-table thead {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+}
+
+.curriculum-framework-table th,
+.curriculum-framework-table td {
+  border: 1px solid #d4dde5;
+}
+
+.curriculum-framework-table th {
+  padding: 14px 8px;
+  background: #f0f5f8;
+  color: #0788df;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.curriculum-framework-table col.curr-col-stt {
+  width: 52px;
+}
+
+.curriculum-framework-table col.curr-col-name {
+  width: 340px;
+}
+
+.curriculum-framework-table col.curr-col-code {
+  width: 170px;
+}
+
+.curriculum-framework-table col.curr-col-type {
+  width: 120px;
+}
+
+.curriculum-framework-table col.curr-col-credit {
+  width: 84px;
+}
+
+.curriculum-framework-table col.curr-col-theory,
+.curriculum-framework-table col.curr-col-practice {
+  width: 118px;
+}
+
+.curriculum-framework-table col.curr-col-elective {
+  width: 126px;
+}
+
+.curriculum-framework-table col.curr-col-required {
+  width: 210px;
+}
+
+.curriculum-framework-table col.curr-col-result {
+  width: 72px;
+}
+
+.curriculum-framework-table td {
+  height: 37px;
+  padding: 7px 8px;
+  color: #46657e;
+  text-align: center;
+  font-size: 12px;
+}
+
+.curriculum-course-name {
+  text-align: left !important;
+}
+
+.curriculum-course-name span,
+.curriculum-course-name small {
+  display: block;
+}
+
+.curriculum-course-name small {
+  margin-top: 3px;
+  color: #778ca0;
+}
+
+.curriculum-course-row:hover {
+  background: #f5fbff;
+}
+
+.selected-course {
+  background: #f0f7fc;
+}
+
+.curriculum-semester-row td {
+  background: #f6f6f6;
+  color: #3b78b1;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.curriculum-semester-row td:first-child,
+.curriculum-group-row td:first-child {
+  text-align: center;
+}
+
+.curriculum-group-row td {
+  background: #fbfbfb;
+  color: #3d77ae;
+  text-align: left;
+  font-weight: 800;
+}
+
+.curriculum-group-row.elective td {
+  background: #fffaf0;
+}
+
+.curriculum-semester-row .row-label,
+.curriculum-group-row .row-label {
+  text-align: center !important;
+  font-weight: 800;
+}
+
+.curriculum-semester-row .row-credit,
+.curriculum-group-row .row-credit {
+  padding-inline: 0 !important;
+  color: #2f6fae;
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.curriculum-result {
+  display: inline-grid;
+  place-items: center;
+}
+
+.curriculum-result span {
+  font-size: 20px;
+}
+
+.curriculum-result.passed {
+  color: #22d53f;
+}
+
+.curriculum-result.failed {
+  color: #ef3333;
+}
+
+.curriculum-result.inprogress {
+  color: #f5a623;
+}
+
+.curriculum-result.notregistered {
+  color: #9aacbc;
+}
+
+.no-gpa-mark {
+  color: #ef2020;
+}
+
+.empty-row {
+  height: 120px !important;
+  color: #7b8fa2 !important;
+  text-align: center !important;
+}
+
+.curriculum-footer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  padding: 0;
+}
+
+.curriculum-footer > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 14px;
+  border-right: 1px solid #d4dde5;
+  border-bottom: 1px solid #d4dde5;
+}
+
+.curriculum-footer > div:nth-child(3) {
+  border-right: 0;
+}
+
+.curriculum-footer span {
+  color: #5c7589;
+}
+
+.curriculum-footer strong {
+  color: #176cae;
+}
+
+.curriculum-footer p {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 14px;
+  color: #d82828;
+  font-size: 12px;
+}
+
+@media (max-width: 820px) {
+  .curriculum-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .curriculum-progress-card {
+    width: 100%;
+  }
+
+  .curriculum-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .curriculum-footer > div {
+    border-right: 0;
+  }
+}
+
+@media print {
+  app-page-header,
+  .curriculum-meta {
+    display: none !important;
+  }
+
+  .curriculum-table-scroll {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .curriculum-framework-table {
+    min-width: 0;
+    font-size: 9px;
+  }
+}

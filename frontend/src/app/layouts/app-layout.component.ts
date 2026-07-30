@@ -86,9 +86,11 @@ export class AppLayoutComponent implements OnInit {
 
     if (role === 'Lecturer') {
       return [
-        { label: 'Tổng quan', icon: 'dashboard', route: '/lecturer/dashboard' },
-        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes' },
-        { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades' },
+        { label: 'Tổng quan', icon: 'dashboard', route: '/lecturer/dashboard', description: 'Tá»•ng quan giáº£ng dáº¡y' },
+        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes', description: 'Sinh viÃªn, thá»‘ng kÃª vÃ  CLO' },
+        { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades', description: 'Nháº­p, import vÃ  gá»­i duyá»‡t Ä‘iá»ƒm' },
+        { label: 'Tài liệu giảng dạy', icon: 'folder_open', route: '/lecturer/materials', description: 'CÃ´ng bá»‘ tÃ i liá»‡u theo lá»›p' },
+        { label: 'Bài tập & chấm bài', icon: 'assignment', route: '/lecturer/assignments', description: 'Giao bÃ i vÃ  pháº£n há»“i' },
         { label: 'Thông báo', icon: 'notifications', route: '/notifications' },
         { label: 'Hồ sơ cá nhân', icon: 'manage_accounts', route: '/profile' }
       ];

@@ -1,0 +1,561 @@
+:host {
+  display: block;
+}
+
+.page-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  gap: 10px;
+  padding: 32px;
+  text-align: center;
+}
+
+.error-state {
+  color: #b42318;
+}
+
+.spin {
+  animation: results-spin 0.9s linear infinite;
+}
+
+@keyframes results-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.outcomes-panel,
+.transcript-shell,
+.graduation-summary {
+  margin-bottom: 16px;
+}
+
+.outcomes-panel {
+  overflow: hidden;
+  padding: 0;
+}
+
+.section-caption {
+  padding: 13px 16px;
+  border-bottom: 1px solid #d8e0e8;
+  background: #fffed1;
+  color: #ef2020;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.wide-table-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.outcome-table,
+.academic-transcript-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.outcome-table {
+  min-width: 920px;
+}
+
+.outcome-table th,
+.outcome-table td,
+.academic-transcript-table th,
+.academic-transcript-table td {
+  border: 1px solid #d5dde5;
+}
+
+.outcome-table th,
+.academic-transcript-table th {
+  background: #f1f6fa;
+  color: #0784dc;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.outcome-table th {
+  padding: 12px 8px;
+}
+
+.outcome-table td {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.outcome-table td:first-child,
+.outcome-table td:last-child {
+  text-align: center;
+}
+
+.outcome-status {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.outcome-status.completed {
+  color: #079455;
+}
+
+.transcript-shell {
+  padding: 0;
+}
+
+.transcript-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #d8e0e8;
+}
+
+.transcript-heading h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.transcript-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  color: #61758a;
+  font-size: 12px;
+}
+
+.transcript-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.legend-dot.passed {
+  background: #16c63b;
+}
+
+.legend-dot.failed {
+  background: #ef4444;
+}
+
+.transcript-scroll {
+  max-height: 66vh;
+  border-top: 0;
+  overflow: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.academic-transcript-table {
+  width: max(100%, 1510px);
+  min-width: 1510px;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.academic-transcript-table col.w-stt {
+  width: 40px;
+}
+
+.academic-transcript-table col.w-code {
+  width: 92px;
+}
+
+.academic-transcript-table col.w-name {
+  width: 210px;
+}
+
+.academic-transcript-table col.w-class {
+  width: 102px;
+}
+
+.academic-transcript-table col.w-credit {
+  width: 50px;
+}
+
+.academic-transcript-table col.w-score {
+  width: 46px;
+}
+
+.academic-transcript-table col.w-regular {
+  width: 58px;
+}
+
+.academic-transcript-table col.w-final {
+  width: 54px;
+}
+
+.academic-transcript-table col.w-total {
+  width: 86px;
+}
+
+.academic-transcript-table col.w-grade4 {
+  width: 72px;
+}
+
+.academic-transcript-table col.w-letter {
+  width: 76px;
+}
+
+.academic-transcript-table col.w-rank {
+  width: 88px;
+}
+
+.academic-transcript-table col.w-pass {
+  width: 44px;
+}
+
+.academic-transcript-table col.w-clo {
+  width: 64px;
+}
+
+.academic-transcript-table col.w-note {
+  width: 110px;
+}
+
+.academic-transcript-table col.w-detail {
+  width: 38px;
+}
+
+.academic-transcript-table thead {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+}
+
+.academic-transcript-table th {
+  min-width: 0;
+  padding: 6px 3px;
+  overflow: hidden;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.academic-transcript-table td {
+  height: 40px;
+  padding: 6px;
+  overflow: hidden;
+  color: #38536d;
+  text-align: center;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.academic-transcript-table .sticky-col {
+  position: sticky;
+  z-index: 5;
+  background: #fff;
+  box-shadow: 1px 0 0 #d5dde5;
+}
+
+.academic-transcript-table thead .sticky-col {
+  z-index: 14;
+  background: #f1f6fa;
+}
+
+.academic-transcript-table .col-stt {
+  left: 0;
+}
+
+.academic-transcript-table .col-code {
+  left: 40px;
+}
+
+.academic-transcript-table .col-name {
+  left: 132px;
+}
+
+.academic-transcript-table .col-class {
+  left: 342px;
+}
+
+.academic-transcript-table .col-credit {
+  left: 444px;
+  box-shadow: 3px 0 5px rgb(15 39 66 / 10%);
+}
+
+.course-result-row:hover .sticky-col {
+  background: #f4faff;
+}
+
+.failed-course .sticky-col {
+  color: #df2424;
+}
+
+.course-result-row:hover {
+  background: #f4faff;
+}
+
+.failed-course td {
+  color: #df2424;
+}
+
+.course-name-cell {
+  text-align: left !important;
+}
+
+.course-name-cell strong,
+.course-name-cell small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-name-cell small {
+  margin-top: 2px;
+  color: #7a8da0;
+}
+
+.semester-title-row td {
+  padding: 8px 9px;
+  background: #f5f5f5;
+  color: #3178b7;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.semester-title-content {
+  position: sticky;
+  left: 10px;
+  display: inline-block;
+  width: max-content;
+}
+
+.numeric-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.total-score-cell,
+.grade4-cell {
+  font-weight: 800;
+}
+
+.academic-transcript-table td.total-score-cell {
+  display: table-cell !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 6px !important;
+  border: 1px solid #d5dde5 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #0877c9 !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+.course-result-row:hover td.total-score-cell {
+  background: #f4faff !important;
+}
+
+.failed-course td.total-score-cell {
+  color: #df2424 !important;
+}
+
+.grade4-cell {
+  color: #38536d !important;
+}
+
+.letter-grade-cell {
+  padding-inline: 8px !important;
+  overflow: visible !important;
+}
+
+.letter-badge {
+  display: inline-flex;
+  min-width: 36px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border: 1px solid #c9deee;
+  border-radius: 8px;
+  background: #eaf4fb;
+  color: #0877c9;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rank-cell {
+  white-space: nowrap;
+}
+
+.result-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.result-icon span {
+  font-size: 18px;
+}
+
+.result-icon.passed {
+  color: #1bd33f;
+}
+
+.result-icon.failed {
+  color: #ef3131;
+}
+
+.note-cell {
+  color: #d72626 !important;
+  text-align: left !important;
+}
+
+.table-detail-button {
+  width: 28px;
+  height: 28px;
+}
+
+.formula-row td {
+  padding: 0;
+  background: #f8fcff;
+}
+
+.formula-row div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 14px;
+  border-left: 3px solid #0784dc;
+}
+
+.formula-row p {
+  margin: 0;
+  text-align: left;
+  line-height: 1.55;
+}
+
+.term-summary-row td {
+  padding: 7px 9px;
+  background: #fbfbfb;
+  color: #4c6d8b;
+  text-align: left;
+}
+
+.term-summary-row strong {
+  color: #0877c9;
+}
+
+.empty-row {
+  height: 90px !important;
+  color: #7a8da0 !important;
+  text-align: center !important;
+}
+
+.graduation-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  padding: 0;
+}
+
+.summary-column {
+  border-right: 1px solid #d5dde5;
+}
+
+.summary-column:nth-child(2) {
+  border-right: 0;
+}
+
+.summary-column h3 {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid #d5dde5;
+  color: #2873b6;
+  font-size: 13px;
+}
+
+.summary-column dl {
+  margin: 0;
+}
+
+.summary-column dl div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d5dde5;
+}
+
+.summary-column dt {
+  color: #496880;
+}
+
+.summary-column dd {
+  margin: 0;
+  color: #1d4e75;
+  font-weight: 800;
+}
+
+.summary-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 9px 12px;
+  color: #ef2020;
+  font-size: 12px;
+}
+
+
+
+@media (max-width: 900px) {
+  .transcript-heading {
+    flex-direction: column;
+  }
+
+  .transcript-legend {
+    justify-content: flex-start;
+  }
+
+  .graduation-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-column {
+    border-right: 0;
+  }
+}
+
+@media print {
+  app-page-header,
+  .transcript-legend,
+  .table-detail-button {
+    display: none !important;
+  }
+
+  .transcript-scroll {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .academic-transcript-table {
+    width: 100%;
+    min-width: 0;
+    font-size: 8px;
+  }
+
+  .academic-transcript-table .sticky-col {
+    position: static;
+    box-shadow: none;
+  }
+}

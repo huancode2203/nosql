@@ -1,0 +1,255 @@
+<app-page-header
+  title="Chương trình khung"
+  subtitle="Danh sách học phần theo chương trình đào tạo và tiến độ tích lũy.">
+  <div class="page-actions">
+    <button
+      class="secondary-button compact-action"
+      type="button"
+      title="In chương trình"
+      (click)="print()">
+      <span class="material-symbols-outlined">print</span>
+      In
+    </button>
+
+    <button
+      class="secondary-button compact-action icon-only-action"
+      type="button"
+      title="Xuất CSV"
+      aria-label="Xuất CSV"
+      (click)="exportCsv()">
+      <span class="material-symbols-outlined">download</span>
+    </button>
+
+    <button
+      class="primary-button compact-action icon-only-action"
+      type="button"
+      title="Toàn màn hình"
+      aria-label="Toàn màn hình"
+      (click)="toggleFullscreen()">
+      <span class="material-symbols-outlined">open_in_full</span>
+    </button>
+  </div>
+</app-page-header>
+
+@if (loading()) {
+  <app-loading />
+} @else if (error()) {
+  <article class="panel curriculum-state error-state">
+    <span class="material-symbols-outlined">error</span>
+    <strong>{{ error() }}</strong>
+  </article>
+} @else if (curriculum(); as data) {
+  <section class="panel curriculum-meta">
+    <div>
+      <span class="eyebrow">
+        {{ data.programCode }}
+        · Phiên bản {{ data.curriculumVersion }}
+      </span>
+      <h2>{{ data.programName }}</h2>
+      <p>
+        {{ data.facultyName }}
+        · Hệ {{ data.educationLevel }}
+        · Khóa áp dụng {{ data.applicableCohort }}
+      </p>
+    </div>
+
+    <div class="curriculum-progress-card">
+      <span>
+        Đã tích lũy
+        <strong>
+          {{ data.completedCredits }}/{{ data.requiredCredits }} TC
+        </strong>
+      </span>
+
+      <div class="curriculum-progress">
+        <i [style.width.%]="data.progressPercent"></i>
+      </div>
+
+      <small>{{ data.progressPercent }}% chương trình</small>
+    </div>
+  </section>
+
+  <section class="panel curriculum-table-panel">
+    <div class="curriculum-table-scroll">
+      <table class="curriculum-framework-table">
+        <colgroup>
+          <col class="curr-col-stt">
+          <col class="curr-col-name">
+          <col class="curr-col-code">
+          <col class="curr-col-type">
+          <col class="curr-col-credit">
+          <col class="curr-col-theory">
+          <col class="curr-col-practice">
+          <col class="curr-col-elective">
+          <col class="curr-col-required">
+          <col class="curr-col-result">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Tên môn học / Học phần</th>
+            <th>Mã Học phần</th>
+            <th>Học phần</th>
+            <th>Số TC</th>
+            <th>Số tiết LT</th>
+            <th>Số tiết TH</th>
+            <th>Nhóm tự chọn</th>
+            <th>Số TC bắt buộc của nhóm</th>
+            <th>Đạt</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (
+            semester of semesters();
+            track semester.semesterNumber
+          ) {
+            <tr class="curriculum-semester-row">
+              <td colspan="4" class="row-label">
+                Học kỳ {{ semester.semesterNumber }}
+              </td>
+              <td class="row-credit">
+                {{ semesterCredits(semester) }}
+              </td>
+              <td colspan="5"></td>
+            </tr>
+
+            <tr class="curriculum-group-row">
+              <td colspan="4" class="row-label">
+                Học phần bắt buộc
+              </td>
+              <td class="row-credit">
+                {{ semester.requiredCredits }}
+              </td>
+              <td colspan="5"></td>
+            </tr>
+
+            @for (
+              course of coursesByGroup(
+                semester,
+                'Required'
+              );
+              track course.courseCode
+            ) {
+              <ng-container
+                [ngTemplateOutlet]="courseRow"
+                [ngTemplateOutletContext]="{
+                  course: course
+                }">
+              </ng-container>
+            }
+
+            @if (
+              coursesByGroup(
+                semester,
+                'Elective'
+              ).length > 0
+            ) {
+              <tr class="curriculum-group-row elective">
+                <td colspan="4" class="row-label">
+                  Học phần tự chọn
+                </td>
+                <td class="row-credit">
+                  {{ semester.electiveCredits }}
+                </td>
+                <td colspan="5"></td>
+              </tr>
+
+              @for (
+                course of coursesByGroup(
+                  semester,
+                  'Elective'
+                );
+                track course.courseCode
+              ) {
+                <ng-container
+                  [ngTemplateOutlet]="courseRow"
+                  [ngTemplateOutletContext]="{
+                    course: course
+                  }">
+                </ng-container>
+              }
+            }
+          } @empty {
+            <tr>
+              <td colspan="10" class="empty-row">
+                Chương trình chưa có danh sách học phần.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <ng-template #courseRow let-course="course">
+      <tr
+        class="curriculum-course-row"
+        [class.selected-course]="course.isSelected">
+        <td>{{ course.order }}</td>
+
+        <td class="curriculum-course-name">
+          <span>
+            {{ course.courseName }}
+            @if (course.excludeFromGpa) {
+              <b class="no-gpa-mark">*</b>
+            }
+          </span>
+
+          @if (course.finalScore !== undefined
+            && course.finalScore !== null) {
+            <small>
+              Điểm tổng kết:
+              {{ course.finalScore }}/10
+            </small>
+          }
+        </td>
+
+        <td>
+          <code>{{ course.courseCode }}</code>
+        </td>
+
+        <td>{{ courseType(course) }}</td>
+        <td>{{ course.credits }}</td>
+        <td>{{ course.theoryPeriods }}</td>
+        <td>{{ course.practicePeriods }}</td>
+        <td>{{ course.electiveGroup || 0 }}</td>
+        <td>{{ course.requiredCreditsInGroup || '' }}</td>
+
+        <td>
+          <span
+            [class]="'curriculum-result ' + statusClass(course.status)"
+            [title]="statusText(course.status)">
+            <span class="material-symbols-outlined">
+              {{ statusIcon(course.status) }}
+            </span>
+          </span>
+        </td>
+      </tr>
+    </ng-template>
+  </section>
+
+  <section class="panel curriculum-footer">
+    <div>
+      <span>Tổng tín chỉ yêu cầu</span>
+      <strong>{{ data.requiredCredits }}</strong>
+    </div>
+    <div>
+      <span>Tín chỉ bắt buộc</span>
+      <strong>{{ data.requiredCompulsoryCredits }}</strong>
+    </div>
+    <div>
+      <span>Tín chỉ tự chọn</span>
+      <strong>{{ data.requiredElectiveCredits }}</strong>
+    </div>
+    <p>
+      <strong>Ghi chú:</strong>
+      Học phần có dấu
+      <b class="no-gpa-mark">*</b>
+      không được tính vào điểm trung bình chung tích lũy.
+    </p>
+  </section>
+} @else {
+  <article class="panel curriculum-state">
+    Không tìm thấy chương trình khung của sinh viên.
+  </article>
+}

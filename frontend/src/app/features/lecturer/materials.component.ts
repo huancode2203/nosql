@@ -1,13 +1,346 @@
-import { Component, OnInit, input, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LecturerClass, MaterialItem } from '../../core/models/portal.models';
 import { ApiService } from '../../core/services/api.service';
-import { MaterialItem } from '../../core/models/portal.models';
-import { PageHeaderComponent } from '../../shared/page-header.component';
 import { ToastService } from '../../core/services/toast.service';
+import { PageHeaderComponent } from '../../shared/page-header.component';
 
-@Component({ standalone: true, imports: [DatePipe, FormsModule, PageHeaderComponent], template: `
-<app-page-header title="Tài liệu học tập" subtitle="Quản lý bài giảng, đề cương, liên kết và thời gian hiển thị."><button class="primary-button" (click)="open()"><span class="material-symbols-outlined">add</span> Thêm tài liệu</button></app-page-header><div class="course-grade-grid">@for(item of items();track item.id){<article class="panel"><div class="panel-heading"><div><span class="eyebrow">{{item.courseCode}} · {{item.chapter}}</span><h3>{{item.title}}</h3><p>{{item.description}}</p></div><span class="badge" [class.success]="item.status==='Published'">{{item.status}}</span></div><div class="detail-list"><div><span>Loại</span><b>{{item.resourceType}}</b></div><div><span>Danh mục</span><b>{{item.category}}</b></div><div><span>Hiển thị từ</span><b>{{item.visibleFrom|date:'dd/MM/yyyy'}}</b></div><div><span>Lượt xem</span><b>{{item.viewCount}}</b></div></div><div class="class-actions"><a class="secondary-button" [href]="item.resourceUrl" target="_blank">Mở tài liệu</a><button class="text-button" (click)="open(item)">Sửa</button><button class="text-button danger-text" (click)="remove(item)">Xóa</button></div></article>}@empty{<article class="panel empty-state"><span class="material-symbols-outlined">folder_open</span><h3>Chưa có tài liệu</h3></article>}</div>
-@if(modal()){<div class="modal-backdrop" (click)="modal.set(false)"><form class="modal" (click)="$event.stopPropagation()" (submit)="$event.preventDefault();save()"><div class="modal-heading"><div><h3>{{form.id?'Cập nhật':'Thêm'}} tài liệu</h3></div><button type="button" class="icon-button" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button></div><div class="form-grid"><label class="full-row">Tiêu đề<input [(ngModel)]="form.title" name="title"/></label><label class="full-row">Mô tả<textarea [(ngModel)]="form.description" name="description" rows="4"></textarea></label><label>Danh mục<input [(ngModel)]="form.category" name="category"/></label><label>Chương/chủ đề<input [(ngModel)]="form.chapter" name="chapter"/></label><label>Loại tài nguyên<select [(ngModel)]="form.resourceType" name="resourceType"><option>Link</option><option>PDF</option><option>Word</option><option>PowerPoint</option></select></label><label>Trạng thái<select [(ngModel)]="form.status" name="status"><option>Draft</option><option>Published</option></select></label><label class="full-row">Đường dẫn<input [(ngModel)]="form.resourceUrl" name="resourceUrl"/></label><label>Hiển thị từ<input type="datetime-local" [(ngModel)]="form.visibleFrom" name="visibleFrom"/></label><label>Hết hạn<input type="datetime-local" [(ngModel)]="form.visibleUntil" name="visibleUntil"/></label></div><div class="modal-actions"><button type="button" class="secondary-button" (click)="modal.set(false)">Hủy</button><button class="primary-button">Lưu tài liệu</button></div></form></div>}
-` })
-export class LecturerMaterialsComponent implements OnInit { id = input.required<string>(); items = signal<MaterialItem[]>([]); modal = signal(false); form: any = {}; constructor(private api: ApiService, private toast: ToastService) {} ngOnInit() { this.load(); } load() { this.api.get<MaterialItem[]>('/lecturer/materials', { classSectionId: this.id() }).subscribe(response => this.items.set(response.data)); } open(item?: MaterialItem) { this.form = item ? { ...item, visibleFrom: this.local(item.visibleFrom), visibleUntil: this.local(item.visibleUntil) } : { classSectionId: this.id(), title: '', description: '', category: 'Bài giảng', chapter: '', resourceType: 'Link', resourceUrl: '', visibleFrom: this.local(new Date().toISOString()), visibleUntil: '', status: 'Published' }; this.modal.set(true); } save() { const id = this.form.id; const body = { ...this.form, classSectionId: this.id(), visibleFrom: this.form.visibleFrom ? new Date(this.form.visibleFrom).toISOString() : null, visibleUntil: this.form.visibleUntil ? new Date(this.form.visibleUntil).toISOString() : null }; delete body.id; const call = id ? this.api.put(`/lecturer/materials/${id}`, body) : this.api.post('/lecturer/materials', body); call.subscribe({ next: () => { this.toast.show('Đã lưu tài liệu', 'success'); this.modal.set(false); this.load(); }, error: error => this.toast.show(error.error?.message || 'Không thể lưu', 'error') }); } remove(item: MaterialItem) { if (!confirm('Xóa tài liệu này?')) return; this.api.delete(`/lecturer/materials/${item.id}`).subscribe(() => this.load()); } private local(value?: string) { if (!value) return ''; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); } }
+interface MaterialForm {
+  classSectionId: string;
+  title: string;
+  description: string;
+  category: string;
+  chapter: string;
+  resourceType: string;
+  resourceUrl: string;
+  visibleFrom: string;
+  visibleUntil: string;
+  status: string;
+}
+
+@Component({
+  standalone: true,
+  imports: [CommonModule, FormsModule, PageHeaderComponent],
+  template: `
+    <app-page-header
+      title="Tài liệu giảng dạy"
+      subtitle="Tạo, cập nhật và công bố tài liệu theo từng lớp học phần."
+      eyebrow="GIẢNG VIÊN">
+      <button class="primary-button" type="button" (click)="openCreate()">
+        <span class="material-symbols-outlined">add</span>
+        Thêm tài liệu
+      </button>
+    </app-page-header>
+
+    <section class="portal-toolbar">
+      <label>
+        <span>Lớp học phần</span>
+        <select [ngModel]="classFilter()" (ngModelChange)="changeClass($event)">
+          <option value="">Tất cả lớp phụ trách</option>
+          @for (item of classes(); track item.id) {
+            <option [value]="item.id">{{ item.classSectionCode }} · {{ item.courseName }}</option>
+          }
+        </select>
+      </label>
+      <label class="portal-search">
+        <span class="material-symbols-outlined">search</span>
+        <input [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Tìm tài liệu">
+      </label>
+      <span class="portal-count">{{ filtered().length }} tài liệu</span>
+    </section>
+
+    @if (loading()) {
+      <div class="portal-loading">Đang tải tài liệu…</div>
+    } @else {
+      <section class="portal-card-grid">
+        @for (item of filtered(); track item.id) {
+          <article class="portal-card">
+            <header>
+              <span class="portal-card-icon material-symbols-outlined">{{ resourceIcon(item.resourceType) }}</span>
+              <span class="badge" [class.success]="item.status === 'Published'">
+                {{ item.status === 'Published' ? 'Đã công bố' : item.status }}
+              </span>
+            </header>
+            <small>{{ item.classSectionCode }} · {{ item.category || 'Tài liệu' }}</small>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.description || 'Không có mô tả.' }}</p>
+            <div class="portal-meta-list">
+              <span><b>Chương:</b> {{ item.chapter || '—' }}</span>
+              <span><b>Hiển thị:</b> {{ item.visibleFrom | date:'dd/MM/yyyy HH:mm' }}</span>
+              <span><b>Loại:</b> {{ item.resourceType }}</span>
+            </div>
+            <footer>
+              <a
+                class="text-button"
+                [href]="api.assetUrl(item.resourceUrl)"
+                target="_blank"
+                rel="noopener">
+                <span class="material-symbols-outlined">open_in_new</span>
+                Mở
+              </a>
+              <span class="portal-actions">
+                <button class="icon-button" type="button" title="Chỉnh sửa" (click)="openEdit(item)">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button class="icon-button danger" type="button" title="Xóa" (click)="remove(item)">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </span>
+            </footer>
+          </article>
+        } @empty {
+          <div class="portal-empty span-2">
+            <span class="material-symbols-outlined">folder_open</span>
+            <h3>Chưa có tài liệu</h3>
+            <p>Hãy tạo tài liệu đầu tiên cho lớp học phần.</p>
+          </div>
+        }
+      </section>
+    }
+
+    @if (modal()) {
+      <div class="modal-backdrop" (click)="closeModal()">
+        <section class="modal portal-modal-wide" (click)="$event.stopPropagation()">
+          <div class="modal-heading">
+            <div>
+              <h3>{{ editingId ? 'Cập nhật tài liệu' : 'Thêm tài liệu' }}</h3>
+              <p>Thông tin hiển thị cho sinh viên của lớp học phần.</p>
+            </div>
+            <button class="icon-button" type="button" (click)="closeModal()">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <div class="portal-form-grid">
+            <label class="span-2">
+              <span>Lớp học phần *</span>
+              <select [(ngModel)]="form.classSectionId">
+                <option value="">Chọn lớp học phần</option>
+                @for (item of classes(); track item.id) {
+                  <option [value]="item.id">{{ item.classSectionCode }} · {{ item.courseName }}</option>
+                }
+              </select>
+            </label>
+            <label class="span-2">
+              <span>Tiêu đề *</span>
+              <input [(ngModel)]="form.title" placeholder="Ví dụ: Bài giảng chương 1">
+            </label>
+            <label class="span-2">
+              <span>Mô tả</span>
+              <textarea [(ngModel)]="form.description" rows="3"></textarea>
+            </label>
+            <label>
+              <span>Danh mục</span>
+              <input [(ngModel)]="form.category" placeholder="Bài giảng, đề cương…">
+            </label>
+            <label>
+              <span>Chương</span>
+              <input [(ngModel)]="form.chapter" placeholder="Chương 1">
+            </label>
+            <label>
+              <span>Loại tài nguyên</span>
+              <select [(ngModel)]="form.resourceType">
+                <option>PDF</option>
+                <option>Link</option>
+                <option>Video</option>
+                <option>Slide</option>
+                <option>Document</option>
+              </select>
+            </label>
+            <label>
+              <span>Trạng thái</span>
+              <select [(ngModel)]="form.status">
+                <option value="Draft">Bản nháp</option>
+                <option value="Published">Công bố</option>
+                <option value="Hidden">Ẩn</option>
+              </select>
+            </label>
+            <label class="span-2">
+              <span>Đường dẫn tài liệu *</span>
+              <input [(ngModel)]="form.resourceUrl" placeholder="https://… hoặc /uploads/…">
+            </label>
+            <label>
+              <span>Hiển thị từ</span>
+              <input type="datetime-local" [(ngModel)]="form.visibleFrom">
+            </label>
+            <label>
+              <span>Ẩn sau thời điểm</span>
+              <input type="datetime-local" [(ngModel)]="form.visibleUntil">
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button class="secondary-button" type="button" (click)="closeModal()">Hủy</button>
+            <button class="primary-button" type="button" [disabled]="saving()" (click)="save()">
+              {{ saving() ? 'Đang lưu…' : 'Lưu tài liệu' }}
+            </button>
+          </div>
+        </section>
+      </div>
+    }
+  `
+})
+export class LecturerMaterialsComponent implements OnInit {
+  readonly classes = signal<LecturerClass[]>([]);
+  readonly materials = signal<MaterialItem[]>([]);
+  readonly loading = signal(true);
+  readonly saving = signal(false);
+  readonly modal = signal(false);
+  readonly classFilter = signal('');
+  readonly search = signal('');
+  editingId = '';
+  form: MaterialForm = this.emptyForm();
+
+  readonly filtered = computed(() => {
+    const keyword = this.search().trim().toLocaleLowerCase('vi');
+    return this.materials().filter(item =>
+      !keyword ||
+      `${item.title} ${item.description} ${item.courseName} ${item.category}`
+        .toLocaleLowerCase('vi')
+        .includes(keyword)
+    );
+  });
+
+  constructor(
+    readonly api: ApiService,
+    private readonly toast: ToastService
+  ) {}
+
+  ngOnInit(): void {
+    this.api.get<LecturerClass[]>('/lecturer/classes').subscribe({
+      next: response => {
+        this.classes.set(response.data ?? []);
+        this.load();
+      },
+      error: () => this.load()
+    });
+  }
+
+  changeClass(value: string): void {
+    this.classFilter.set(value);
+    this.load();
+  }
+
+  load(): void {
+    this.loading.set(true);
+    const params = this.classFilter()
+      ? { classSectionId: this.classFilter() }
+      : undefined;
+    this.api.get<MaterialItem[]>('/lecturer/materials', params).subscribe({
+      next: response => {
+        this.materials.set(response.data ?? []);
+        this.loading.set(false);
+      },
+      error: error => {
+        this.loading.set(false);
+        this.toast.show(error.error?.message || 'Không thể tải tài liệu', 'error');
+      }
+    });
+  }
+
+  openCreate(): void {
+    this.editingId = '';
+    this.form = this.emptyForm();
+    this.form.classSectionId = this.classFilter() || this.classes()[0]?.id || '';
+    this.modal.set(true);
+  }
+
+  openEdit(item: MaterialItem): void {
+    this.editingId = item.id;
+    this.form = {
+      classSectionId: item.classSectionId,
+      title: item.title,
+      description: item.description,
+      category: item.category,
+      chapter: item.chapter,
+      resourceType: item.resourceType,
+      resourceUrl: item.resourceUrl,
+      visibleFrom: this.toLocalInput(item.visibleFrom),
+      visibleUntil: this.toLocalInput(item.visibleUntil),
+      status: item.status
+    };
+    this.modal.set(true);
+  }
+
+  closeModal(): void {
+    if (!this.saving()) this.modal.set(false);
+  }
+
+  save(): void {
+    if (!this.form.classSectionId || !this.form.title.trim() || !this.form.resourceUrl.trim()) {
+      this.toast.show('Vui lòng chọn lớp, nhập tiêu đề và đường dẫn tài liệu', 'error');
+      return;
+    }
+
+    const body = {
+      ...this.form,
+      title: this.form.title.trim(),
+      resourceUrl: this.form.resourceUrl.trim(),
+      visibleFrom: this.form.visibleFrom ? new Date(this.form.visibleFrom).toISOString() : null,
+      visibleUntil: this.form.visibleUntil ? new Date(this.form.visibleUntil).toISOString() : null
+    };
+
+    this.saving.set(true);
+    const request = this.editingId
+      ? this.api.put<MaterialItem>(`/lecturer/materials/${this.editingId}`, body)
+      : this.api.post<MaterialItem>('/lecturer/materials', body);
+
+    request.subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.modal.set(false);
+        this.toast.show(this.editingId ? 'Đã cập nhật tài liệu' : 'Đã tạo tài liệu', 'success');
+        this.load();
+      },
+      error: error => {
+        this.saving.set(false);
+        this.toast.show(error.error?.message || 'Lưu tài liệu thất bại', 'error');
+      }
+    });
+  }
+
+  remove(item: MaterialItem): void {
+    if (!window.confirm(`Xóa tài liệu “${item.title}”?`)) return;
+    this.api.delete(`/lecturer/materials/${item.id}`).subscribe({
+      next: () => {
+        this.toast.show('Đã xóa tài liệu', 'success');
+        this.load();
+      },
+      error: error => this.toast.show(error.error?.message || 'Xóa tài liệu thất bại', 'error')
+    });
+  }
+
+  resourceIcon(type: string): string {
+    const value = type.toLowerCase();
+    if (value.includes('video')) return 'play_circle';
+    if (value.includes('pdf')) return 'picture_as_pdf';
+    if (value.includes('slide')) return 'slideshow';
+    if (value.includes('link')) return 'link';
+    return 'description';
+  }
+
+  private emptyForm(): MaterialForm {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return {
+      classSectionId: '',
+      title: '',
+      description: '',
+      category: 'Bài giảng',
+      chapter: '',
+      resourceType: 'PDF',
+      resourceUrl: '',
+      visibleFrom: now.toISOString().slice(0, 16),
+      visibleUntil: '',
+      status: 'Published'
+    };
+  }
+
+  private toLocalInput(value?: string): string {
+    if (!value) return '';
+    const date = new Date(value);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
+  }
+}

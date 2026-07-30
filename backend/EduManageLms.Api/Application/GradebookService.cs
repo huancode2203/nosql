@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using EduManageLms.Api.Common;
 using EduManageLms.Api.Domain;
 using EduManageLms.Api.Infrastructure;
@@ -46,10 +46,7 @@ public sealed class GradebookService(
                         var score = course?.Scores
                             .FirstOrDefault(x => x.ComponentId == component.ComponentId);
 
-                        if (score is null) return null;
-                        if (!string.IsNullOrWhiteSpace(score.RawInput)) return score.RawInput;
-
-                        return score.Score?.ToString(
+                        return score?.Score?.ToString(
                             "0.################",
                             CultureInfo.InvariantCulture);
                     });

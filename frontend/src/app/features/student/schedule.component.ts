@@ -1,50 +1,112 @@
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
-import { ApiService } from '../../core/services/api.service';
+import { FormsModule } from '@angular/forms';
 import { ScheduleItem } from '../../core/models/portal.models';
+import { ApiService } from '../../core/services/api.service';
+import { ToastService } from '../../core/services/toast.service';
 import { PageHeaderComponent } from '../../shared/page-header.component';
-
-const DAY_NAMES: Record<string, string> = {
-  Monday: 'Thứ Hai', Tuesday: 'Thứ Ba', Wednesday: 'Thứ Tư', Thursday: 'Thứ Năm',
-  Friday: 'Thứ Sáu', Saturday: 'Thứ Bảy', Sunday: 'Chủ Nhật'
-};
 
 @Component({
   standalone: true,
-  imports: [DatePipe, PageHeaderComponent],
+  imports: [CommonModule, FormsModule, PageHeaderComponent],
   template: `
-  <app-page-header title="Lịch học và lịch thi" subtitle="Tổng hợp thời khóa biểu và lịch thi của các lớp đã đăng ký."></app-page-header>
-  <section class="academic-filter-bar panel compact-filters">
-    <label>Loại lịch<select [value]="typeFilter()" (change)="typeFilter.set($any($event.target).value)"><option value="all">Tất cả</option><option value="Class">Lịch học</option><option value="Exam">Lịch thi</option></select></label>
-    <div class="schedule-summary"><span class="status-chip">{{ classCount() }} buổi học</span><span class="status-chip warning">{{ examCount() }} lịch thi</span></div>
-  </section>
-  <div class="schedule-grid">
-    @for (day of days; track day) {
-      <article class="panel">
-        <div class="panel-heading"><div><span class="eyebrow">{{ dayLabel(day).toLocaleUpperCase('vi') }}</span><h3>{{ dayLabel(day) }}</h3></div><span class="badge">{{ byDay(day).length }} lịch</span></div>
-        <div class="timeline">
-          @for (item of byDay(day); track item.type + item.courseCode + item.startTime + item.date) {
-            <div class="timeline-item" [class.exam]="item.type === 'Exam'">
-              <time>{{ item.startTime }}<small>{{ item.endTime }}</small></time>
-              <div><span class="eyebrow">{{ item.type === 'Exam' ? 'LỊCH THI' : item.classSectionCode }}</span><h4>{{ item.courseCode }} - {{ item.courseName }}</h4><p>{{ item.room }} · {{ item.lecturerName || item.note }}</p>@if (item.date) { <small>{{ item.date | date:'dd/MM/yyyy' }}</small> }</div>
-            </div>
-          } @empty { <div class="empty compact-empty">Không có lịch</div> }
-        </div>
-      </article>
-    }
-  </div>`
-})
-export class ScheduleComponent implements OnInit {
-  readonly items = signal<ScheduleItem[]>([]);
-  readonly typeFilter = signal('all');
-  readonly days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  readonly classCount = computed(() => this.items().filter(item => item.type !== 'Exam').length);
-  readonly examCount = computed(() => this.items().filter(item => item.type === 'Exam').length);
+    <app-page-header
+      title="Lịch học và lịch thi"
+      subtitle="Theo dõi thời gian, phòng học và các ca thi của học kỳ hiện tại."
+      eyebrow="SINH VIÊN">
+    </app-page-header>
 
-  constructor(private readonly api: ApiService) {}
-  ngOnInit(): void { this.api.get<ScheduleItem[]>('/student/schedule').subscribe(response => this.items.set(response.data)); }
-  dayLabel(day: string): string { return DAY_NAMES[day] || day; }
-  byDay(day: string): ScheduleItem[] {
-    return this.items().filter(item => item.dayOfWeek === day && (this.typeFilter() === 'all' || item.type === this.typeFilter()));
+    <section class="portal-toolbar">
+      <label>
+        <span>Loại lịch</span>
+        <select [ngModel]="typeFilter()" (ngModelChange)="typeFilter.set($event)">
+          <option value="">Tất cả</option>
+          <option value="Class">Lịch học</option>
+          <option value="Exam">Lịch thi</option>
+        </select>
+      </label>
+      <span class="portal-count">{{ filtered().length }} sự kiện</span>
+    </section>
+
+    @if (loading()) {
+      <div class="portal-loading">Đang tải lịch học…</div>
+    } @else {
+      <section class="portal-timeline">
+        @for (item of filtered(); track item.type + item.classSectionCode + item.startTime) {
+          <article [class.exam]="item.type === 'Exam'">
+            <div class="portal-time">
+              <strong>{{ item.date ? (item.date | date:'dd/MM') : dayLabel(item.dayOfWeek) }}</strong>
+              <span>{{ item.startTime }}–{{ item.endTime }}</span>
+            </div>
+            <div class="portal-timeline-icon">
+              <span class="material-symbols-outlined">{{ item.type === 'Exam' ? 'quiz' : 'school' }}</span>
+            </div>
+            <div class="portal-timeline-content">
+              <header>
+                <div>
+                  <small>{{ item.courseCode }} · {{ item.classSectionCode }}</small>
+                  <h3>{{ item.courseName }}</h3>
+                </div>
+                <span class="badge" [class.danger]="item.type === 'Exam'">
+                  {{ item.type === 'Exam' ? 'Lịch thi' : 'Lịch học' }}
+                </span>
+              </header>
+              <p>
+                <span class="material-symbols-outlined">location_on</span>
+                Phòng {{ item.room || 'Chưa xếp' }}
+                @if (item.lecturerName) { · {{ item.lecturerName }} }
+              </p>
+              @if (item.note) { <small>{{ item.note }}</small> }
+            </div>
+          </article>
+        } @empty {
+          <div class="portal-empty">
+            <span class="material-symbols-outlined">calendar_month</span>
+            <h3>Chưa có lịch</h3>
+            <p>Lịch học hoặc lịch thi chưa được cập nhật.</p>
+          </div>
+        }
+      </section>
+    }
+  `
+})
+export class StudentScheduleComponent implements OnInit {
+  readonly items = signal<ScheduleItem[]>([]);
+  readonly loading = signal(true);
+  readonly typeFilter = signal('');
+
+  readonly filtered = computed(() =>
+    this.items().filter(item => !this.typeFilter() || item.type === this.typeFilter())
+  );
+
+  constructor(
+    private readonly api: ApiService,
+    private readonly toast: ToastService
+  ) {}
+
+  ngOnInit(): void {
+    this.api.get<ScheduleItem[]>('/student/schedule').subscribe({
+      next: response => {
+        this.items.set(response.data ?? []);
+        this.loading.set(false);
+      },
+      error: error => {
+        this.loading.set(false);
+        this.toast.show(error.error?.message || 'Không thể tải lịch học', 'error');
+      }
+    });
+  }
+
+  dayLabel(day: string): string {
+    const values: Record<string, string> = {
+      Monday: 'Thứ Hai',
+      Tuesday: 'Thứ Ba',
+      Wednesday: 'Thứ Tư',
+      Thursday: 'Thứ Năm',
+      Friday: 'Thứ Sáu',
+      Saturday: 'Thứ Bảy',
+      Sunday: 'Chủ Nhật'
+    };
+    return values[day] ?? day;
   }
 }
