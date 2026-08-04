@@ -1323,40 +1323,6 @@ body.dark-theme .floating-launcher-button[aria-expanded='true'] {
   }
 }
 
-/* EDU_FONT_PATCH_START */
-:root {
-  --edu-font-family:
-    "Segoe UI Variable Text",
-    "Segoe UI",
-    Roboto,
-    Arial,
-    sans-serif;
-}
-
-html,
-body,
-button,
-input,
-select,
-textarea {
-  font-family: var(--edu-font-family) !important;
-}
-
-html,
-body {
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-button,
-input,
-select,
-textarea {
-  font-size: inherit;
-}
-/* EDU_FONT_PATCH_END */
-
 /* EDU_GRADEBOOK_BUGFIX_START */
 .result-table td.final-score.final-score-column {
   display: table-cell !important;
@@ -1564,3 +1530,11 @@ textarea {
 img.account-avatar {
   object-fit: cover;
 }
+
+/* Final typography guard. Keep this import last. */
+@import './font-normalization.scss';
+
+/* Final launcher and typography guard. Keep this import last. */
+
+/* Final launcher typography and icon fix v1.4. */
+@import './launcher-font-layout-fix.scss';

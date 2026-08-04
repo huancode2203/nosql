@@ -20,7 +20,7 @@ services:
         chmod 400 /tmp/mongodb-keyfile
         chown 999:999 /tmp/mongodb-keyfile
         exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongodb-keyfile --bind_ip_all
-    ports: ["27017:27017"]
+    ports: ["27018:27017"]
     volumes:
       - mongo_data:/data/db
       - ./database/init:/docker-entrypoint-initdb.d:ro

@@ -1,4 +1,4 @@
-﻿import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from '../core/services/api.service';
 import { AuthService } from '../core/services/auth.service';
@@ -86,11 +86,11 @@ export class AppLayoutComponent implements OnInit {
 
     if (role === 'Lecturer') {
       return [
-        { label: 'Tổng quan', icon: 'dashboard', route: '/lecturer/dashboard', description: 'Tá»•ng quan giáº£ng dáº¡y' },
-        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes', description: 'Sinh viÃªn, thá»‘ng kÃª vÃ  CLO' },
-        { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades', description: 'Nháº­p, import vÃ  gá»­i duyá»‡t Ä‘iá»ƒm' },
-        { label: 'Tài liệu giảng dạy', icon: 'folder_open', route: '/lecturer/materials', description: 'CÃ´ng bá»‘ tÃ i liá»‡u theo lá»›p' },
-        { label: 'Bài tập & chấm bài', icon: 'assignment', route: '/lecturer/assignments', description: 'Giao bÃ i vÃ  pháº£n há»“i' },
+        { label: 'Tổng quan', icon: 'dashboard', route: '/lecturer/dashboard', description: 'Tổng quan giảng dạy' },
+        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes', description: 'Sinh viên, thống kê và CLO' },
+        { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades', description: 'Nhập, import và gửi duyệt điểm' },
+        { label: 'Tài liệu giảng dạy', icon: 'folder_open', route: '/lecturer/materials', description: 'Công bố tài liệu theo lớp' },
+        { label: 'Bài tập & chấm bài', icon: 'assignment', route: '/lecturer/assignments', description: 'Giao bài và phản hồi' },
         { label: 'Thông báo', icon: 'notifications', route: '/notifications' },
         { label: 'Hồ sơ cá nhân', icon: 'manage_accounts', route: '/profile' }
       ];

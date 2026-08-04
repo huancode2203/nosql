@@ -18,3 +18,9 @@ patch-backup-*/
 **/patch-backup-*/
 .angular/
 .vs/
+
+# Local patch backups and reports
+patch-backup-*/
+font-encoding-scan-report*.txt
+database-review.txt
+review-database.js
