@@ -92,7 +92,7 @@ interface GradeForm {
                 <button class="icon-button" type="button" title="Chỉnh sửa" (click)="openEdit(item)">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
-                <button class="icon-button danger" type="button" title="Xóa" (click)="remove(item)">
+                <button class="icon-button danger" type="button" title="Xóa" [disabled]="!!deletingId()" (click)="remove(item)">
                   <span class="material-symbols-outlined">delete</span>
                 </button>
               </span>
@@ -187,7 +187,7 @@ interface GradeForm {
                     </span>
                   </header>
                   <p>{{ item.textContent || 'Không có nội dung văn bản.' }}</p>
-                  @if (item.files?.length) {
+                  @if (item.files.length) {
                     <div class="portal-file-list">
                       @for (file of item.files; track file.url) {
                         <a [href]="api.assetUrl(file.url)" target="_blank" rel="noopener">
@@ -223,8 +223,8 @@ interface GradeForm {
                       <input type="checkbox" [(ngModel)]="gradeForms[item.id].resubmissionAllowed">
                       <span>Cho phép nộp lại</span>
                     </label>
-                    <button class="primary-button" type="button" (click)="saveGrade(item)">
-                      Lưu điểm
+                    <button class="primary-button" type="button" [disabled]="isGrading(item.id)" (click)="saveGrade(item)">
+                      {{ isGrading(item.id) ? 'Đang lưu…' : 'Lưu điểm' }}
                     </button>
                   </div>
                 </article>
@@ -248,6 +248,8 @@ export class LecturerAssignmentsComponent implements OnInit {
   readonly selectedAssignment = signal<AssignmentItem | null>(null);
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly deletingId = signal('');
+  readonly gradingIds = signal<ReadonlySet<string>>(new Set());
   readonly submissionsLoading = signal(false);
   readonly formModal = signal(false);
   readonly submissionModal = signal(false);
@@ -335,8 +337,19 @@ export class LecturerAssignmentsComponent implements OnInit {
   }
 
   save(): void {
+    if (this.saving()) return;
     if (!this.form.classSectionId || !this.form.title.trim() || !this.form.openAt || !this.form.dueAt) {
       this.toast.show('Vui lòng nhập đầy đủ lớp, tiêu đề và thời gian', 'error');
+      return;
+    }
+    const maxScore = Number(this.form.maxScore);
+    const latePenalty = Number(this.form.latePenaltyPercent);
+    if (!Number.isFinite(maxScore) || maxScore <= 0) {
+      this.toast.show('Điểm tối đa phải lớn hơn 0', 'error');
+      return;
+    }
+    if (!Number.isFinite(latePenalty) || latePenalty < 0 || latePenalty > 100) {
+      this.toast.show('Tỷ lệ trừ điểm nộp trễ phải từ 0 đến 100', 'error');
       return;
     }
     if (new Date(this.form.dueAt) <= new Date(this.form.openAt)) {
@@ -349,11 +362,11 @@ export class LecturerAssignmentsComponent implements OnInit {
       title: this.form.title.trim(),
       content: this.form.content,
       attachmentUrl: this.form.attachmentUrl,
-      maxScore: Number(this.form.maxScore),
+      maxScore,
       openAt: new Date(this.form.openAt).toISOString(),
       dueAt: new Date(this.form.dueAt).toISOString(),
       allowLate: this.form.allowLate,
-      latePenaltyPercent: Number(this.form.latePenaltyPercent),
+      latePenaltyPercent: latePenalty,
       cloCodes: this.form.cloCodesText
         .split(',')
         .map(value => value.trim())
@@ -382,13 +395,19 @@ export class LecturerAssignmentsComponent implements OnInit {
   }
 
   remove(item: AssignmentItem): void {
+    if (this.deletingId()) return;
     if (!window.confirm(`Xóa bài tập “${item.title}”?`)) return;
+    this.deletingId.set(item.id);
     this.api.delete(`/lecturer/assignments/${item.id}`).subscribe({
       next: () => {
+        this.deletingId.set('');
         this.toast.show('Đã xóa bài tập', 'success');
         this.load();
       },
-      error: error => this.toast.show(error.error?.message || 'Xóa bài tập thất bại', 'error')
+      error: error => {
+        this.deletingId.set('');
+        this.toast.show(error.error?.message || 'Xóa bài tập thất bại', 'error');
+      }
     });
   }
 
@@ -425,6 +444,7 @@ export class LecturerAssignmentsComponent implements OnInit {
   }
 
   saveGrade(item: SubmissionItem): void {
+    if (this.isGrading(item.id)) return;
     const form = this.gradeForms[item.id];
     const assignment = this.selectedAssignment();
     if (!form || form.score === null || !assignment) {
@@ -436,6 +456,7 @@ export class LecturerAssignmentsComponent implements OnInit {
       return;
     }
 
+    this.setGrading(item.id, true);
     this.api.put(`/lecturer/submissions/${item.id}/grade`, {
       score: Number(form.score),
       feedback: form.feedback,
@@ -443,10 +464,14 @@ export class LecturerAssignmentsComponent implements OnInit {
       status: form.status
     }).subscribe({
       next: () => {
+        this.setGrading(item.id, false);
         this.toast.show(`Đã lưu điểm cho ${item.studentName}`, 'success');
         this.openSubmissions(assignment);
       },
-      error: error => this.toast.show(error.error?.message || 'Chấm bài thất bại', 'error')
+      error: error => {
+        this.setGrading(item.id, false);
+        this.toast.show(error.error?.message || 'Chấm bài thất bại', 'error');
+      }
     });
   }
 
@@ -457,6 +482,16 @@ export class LecturerAssignmentsComponent implements OnInit {
       Closed: 'Đã đóng'
     };
     return values[status] ?? status;
+  }
+
+  isGrading(id: string): boolean {
+    return this.gradingIds().has(id);
+  }
+
+  private setGrading(id: string, working: boolean): void {
+    const next = new Set(this.gradingIds());
+    working ? next.add(id) : next.delete(id);
+    this.gradingIds.set(next);
   }
 
   private emptyForm(): AssignmentForm {

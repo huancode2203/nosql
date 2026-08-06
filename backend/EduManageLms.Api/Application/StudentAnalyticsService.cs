@@ -210,7 +210,7 @@ public sealed class StudentAnalyticsService(MongoContext db) : IStudentAnalytics
             Stage("""{ "$unwind": "$academicRecords" }"""),
             Stage("""{ "$unwind": "$academicRecords.semesters" }"""),
             Stage("""{ "$unwind": "$academicRecords.semesters.courses" }"""),
-            Stage("""{ "$match": { "academicRecords.semesters.courses.scoreStatus": "Published" } }"""),
+            Stage("""{ "$match": { "academicRecords.semesters.courses.scoreStatus": { "$in": ["Published", "Locked"] } } }"""),
             Stage("""{ "$unwind": "$academicRecords.semesters.courses.scores" }"""),
             Stage("""
             {
@@ -318,7 +318,7 @@ public sealed class StudentAnalyticsService(MongoContext db) : IStudentAnalytics
             pipeline.Add(new BsonDocument("$match", new BsonDocument("academicRecords.academicYearName", year)));
         if (!string.IsNullOrWhiteSpace(semester))
             pipeline.Add(new BsonDocument("$match", new BsonDocument("academicRecords.semesters.semesterCode", semester)));
-        pipeline.Add(Stage("""{ "$match": { "academicRecords.semesters.courses.scoreStatus": "Published" } }"""));
+        pipeline.Add(Stage("""{ "$match": { "academicRecords.semesters.courses.scoreStatus": { "$in": ["Published", "Locked"] } } }"""));
         pipeline.Add(Stage("""{ "$unwind": "$academicRecords.semesters.courses.scores" }"""));
         return pipeline;
     }

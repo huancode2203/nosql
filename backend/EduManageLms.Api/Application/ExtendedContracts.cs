@@ -88,7 +88,8 @@ public sealed record AssignmentDto(
     int SubmissionCount,
     string? StudentSubmissionStatus,
     double? StudentScore,
-    string? StudentFeedback);
+    string? StudentFeedback,
+    bool StudentResubmissionAllowed);
 
 public sealed record AssignmentUpsertRequest(
     string ClassSectionId,

@@ -83,7 +83,7 @@ interface MaterialForm {
                 <button class="icon-button" type="button" title="Chỉnh sửa" (click)="openEdit(item)">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
-                <button class="icon-button danger" type="button" title="Xóa" (click)="remove(item)">
+                <button class="icon-button danger" type="button" title="Xóa" [disabled]="!!deletingId()" (click)="remove(item)">
                   <span class="material-symbols-outlined">delete</span>
                 </button>
               </span>
@@ -186,6 +186,7 @@ export class LecturerMaterialsComponent implements OnInit {
   readonly materials = signal<MaterialItem[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly deletingId = signal('');
   readonly modal = signal(false);
   readonly classFilter = signal('');
   readonly search = signal('');
@@ -268,17 +269,35 @@ export class LecturerMaterialsComponent implements OnInit {
   }
 
   save(): void {
+    if (this.saving()) return;
     if (!this.form.classSectionId || !this.form.title.trim() || !this.form.resourceUrl.trim()) {
       this.toast.show('Vui lòng chọn lớp, nhập tiêu đề và đường dẫn tài liệu', 'error');
+      return;
+    }
+    const visibleFrom = this.form.visibleFrom
+      ? new Date(this.form.visibleFrom)
+      : new Date();
+    const visibleUntil = this.form.visibleUntil
+      ? new Date(this.form.visibleUntil)
+      : null;
+    if (Number.isNaN(visibleFrom.getTime())) {
+      this.toast.show('Thời điểm hiển thị không hợp lệ', 'error');
+      return;
+    }
+    if (visibleUntil && (Number.isNaN(visibleUntil.getTime()) || visibleUntil <= visibleFrom)) {
+      this.toast.show('Thời điểm ẩn phải sau thời điểm hiển thị', 'error');
       return;
     }
 
     const body = {
       ...this.form,
       title: this.form.title.trim(),
+      description: this.form.description.trim(),
+      category: this.form.category.trim(),
+      chapter: this.form.chapter.trim(),
       resourceUrl: this.form.resourceUrl.trim(),
-      visibleFrom: this.form.visibleFrom ? new Date(this.form.visibleFrom).toISOString() : null,
-      visibleUntil: this.form.visibleUntil ? new Date(this.form.visibleUntil).toISOString() : null
+      visibleFrom: visibleFrom.toISOString(),
+      visibleUntil: visibleUntil?.toISOString() ?? null
     };
 
     this.saving.set(true);
@@ -301,13 +320,19 @@ export class LecturerMaterialsComponent implements OnInit {
   }
 
   remove(item: MaterialItem): void {
+    if (this.deletingId()) return;
     if (!window.confirm(`Xóa tài liệu “${item.title}”?`)) return;
+    this.deletingId.set(item.id);
     this.api.delete(`/lecturer/materials/${item.id}`).subscribe({
       next: () => {
+        this.deletingId.set('');
         this.toast.show('Đã xóa tài liệu', 'success');
         this.load();
       },
-      error: error => this.toast.show(error.error?.message || 'Xóa tài liệu thất bại', 'error')
+      error: error => {
+        this.deletingId.set('');
+        this.toast.show(error.error?.message || 'Xóa tài liệu thất bại', 'error');
+      }
     });
   }
 

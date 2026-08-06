@@ -33,6 +33,8 @@ export class ResourceListComponent implements OnInit {
 
   readonly items = signal<Record<string, any>[]>([]);
   readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly workingId = signal('');
   readonly deletedOnly = signal(false);
   readonly modal = signal(false);
   readonly importModal = signal(false);
@@ -49,6 +51,7 @@ export class ResourceListComponent implements OnInit {
   readonly permissionOptions = ADMIN_PERMISSIONS;
   search = '';
   page = 1;
+  readonly pageSize = 20;
   total = 0;
   importFile: File | null = null;
 
@@ -99,6 +102,9 @@ export class ResourceListComponent implements OnInit {
   }
 
   open(item?: Record<string, any>) {
+    if (this.saving()) {
+      return;
+    }
     const value = item
       ? this.normalizeForForm(item)
       : this.defaultValue();
@@ -107,6 +113,9 @@ export class ResourceListComponent implements OnInit {
   }
 
   save() {
+    if (this.saving()) {
+      return;
+    }
     const entity = this.editing();
     const id = entity['id'];
     const body: Record<string, unknown> = {};
@@ -121,62 +130,109 @@ export class ResourceListComponent implements OnInit {
         continue;
       }
       const value = entity[field.key];
-      if (value !== undefined && value !== null && value !== '') {
-        body[field.key] = value;
-      } else if (field.type === 'checkbox') {
-        body[field.key] = false;
+      if (field.required && this.isBlank(value)) {
+        this.toast.show(`Vui lòng nhập ${field.label.toLowerCase()}`, 'error');
+        return;
+      }
+      if (field.type === 'number' && !this.isBlank(value)) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+          this.toast.show(`${field.label} phải là một số hợp lệ`, 'error');
+          return;
+        }
+        if (!Number.isInteger(numeric)) {
+          this.toast.show(`${field.label} phải là số nguyên`, 'error');
+          return;
+        }
+        body[field.key] = numeric;
+        continue;
+      }
+      body[field.key] = field.type === 'checkbox'
+        ? !!value
+        : this.isBlank(value) ? null : value;
+    }
+
+    if (this.resource() === 'users') {
+      if (entity['role'] === 'Student' && this.isBlank(entity['studentCode'])) {
+        this.toast.show('Tài khoản sinh viên phải có mã sinh viên', 'error');
+        return;
+      }
+      if (entity['role'] === 'Lecturer' && this.isBlank(entity['lecturerCode'])) {
+        this.toast.show('Tài khoản giảng viên phải có mã giảng viên', 'error');
+        return;
       }
     }
 
+    this.saving.set(true);
     const call = id
       ? this.api.put(`/admin/${this.resource()}/${id}`, body)
       : this.api.post(`/admin/${this.resource()}`, body);
     call.subscribe({
       next: () => {
+        this.saving.set(false);
         this.toast.show('Lưu dữ liệu thành công', 'success');
         this.modal.set(false);
         this.load();
         this.loadOptions();
       },
-      error: error => this.toast.show(
-        error.error?.message || 'Không thể lưu dữ liệu',
-        'error'
-      )
+      error: error => {
+        this.saving.set(false);
+        this.toast.show(
+          error.error?.message || 'Không thể lưu dữ liệu',
+          'error'
+        );
+      }
     });
   }
 
   remove(item: Record<string, any>) {
+    if (this.workingId()) {
+      return;
+    }
     if (!confirm('Xác nhận xóa mềm bản ghi này?')) {
       return;
     }
+    this.workingId.set(item['id']);
     this.api.delete(`/admin/${this.resource()}/${item['id']}`).subscribe({
       next: () => {
+        this.workingId.set('');
         this.toast.show('Đã chuyển bản ghi vào thùng rác', 'success');
         this.load();
       },
-      error: error => this.toast.show(
-        error.error?.message || 'Không thể xóa',
-        'error'
-      )
+      error: error => {
+        this.workingId.set('');
+        this.toast.show(
+          error.error?.message || 'Không thể xóa',
+          'error'
+        );
+      }
     });
   }
 
   restore(item: Record<string, any>) {
+    if (this.workingId()) {
+      return;
+    }
     if (!confirm('Khôi phục bản ghi này?')) {
       return;
     }
+    this.workingId.set(item['id']);
     this.api.post(
       `/admin/${this.resource()}/${item['id']}/restore`,
       {}
     ).subscribe({
       next: () => {
+        this.workingId.set('');
         this.toast.show('Khôi phục dữ liệu thành công', 'success');
         this.load();
       },
-      error: error => this.toast.show(
-        error.error?.message || 'Không thể khôi phục',
-        'error'
-      )
+      error: error => {
+        this.workingId.set('');
+        this.toast.show(
+          error.error?.message || 'Không thể khôi phục',
+          'error'
+        );
+      }
     });
   }
 
@@ -452,6 +508,12 @@ export class ResourceListComponent implements OnInit {
       );
     }
     return value;
+  }
+
+  private isBlank(value: unknown): boolean {
+    return value === undefined
+      || value === null
+      || (typeof value === 'string' && value.trim() === '');
   }
 
   private download(blob: Blob, name: string) {

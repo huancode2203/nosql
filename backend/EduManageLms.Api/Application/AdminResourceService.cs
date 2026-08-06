@@ -75,6 +75,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         SanitizeBody(resource, body);
         NormalizeBody(resource, body);
         await ResolveReferencesAsync(resource, body, ct);
+        NormalizeRolePermissions(resource, body);
         ValidateResourceBody(resource, body, updating: false);
         ValidateSpecializedFields(resource, body);
         await EnsureUniqueAsync(resource, body, currentId: null, ct);
@@ -113,6 +114,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     session,
                     resource,
                     document,
+                    null,
                     token);
                 await WriteAuditAsync(
                     session,
@@ -138,16 +140,23 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     {
         var oid = ParseId(id);
         var existing = await Collection(resource)
-            .Find(Builders<BsonDocument>.Filter.Eq("_id", oid))
+            .Find(
+                Builders<BsonDocument>.Filter.Eq("_id", oid)
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
             .FirstOrDefaultAsync(ct) ?? throw new NotFoundException();
 
         SanitizeBody(resource, body);
         NormalizeBody(resource, body);
         await ResolveReferencesAsync(resource, body, ct);
+        NormalizeRolePermissions(resource, body, existing);
         ValidateResourceBody(resource, body, updating: true);
         ValidateSpecializedFields(resource, body);
         await EnsureUniqueAsync(resource, body, id, ct);
 
+        var fieldsToUnset = body
+            .Where(pair => IsClearValue(pair.Value))
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var updateDocument = ToBson(body);
         if (resource.Equals("users", StringComparison.OrdinalIgnoreCase)
             && body.ContainsKey("permissions"))
@@ -162,14 +171,20 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         }
 
         updateDocument.Remove("password");
+        fieldsToUnset.Remove("password");
         updateDocument["updatedAt"] = DateTime.UtcNow;
 
-        if (updateDocument.ElementCount == 1 && updateDocument.Contains("updatedAt"))
+        if (updateDocument.ElementCount == 1
+            && updateDocument.Contains("updatedAt")
+            && fieldsToUnset.Count == 0)
             throw new AppException("Không có dữ liệu hợp lệ để cập nhật");
 
         var afterDocument = existing.DeepClone().AsBsonDocument;
         foreach (var element in updateDocument)
             afterDocument[element.Name] = element.Value;
+        foreach (var field in fieldsToUnset)
+            afterDocument.Remove(field);
+        ValidateCompleteDocument(resource, afterDocument);
 
         var result = await InTransactionAsync(
             async (session, token) =>
@@ -180,10 +195,20 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     body,
                     id,
                     token);
+                var update = new BsonDocument(
+                    "$set",
+                    updateDocument);
+                if (fieldsToUnset.Count > 0)
+                {
+                    update["$unset"] = new BsonDocument(
+                        fieldsToUnset.Select(field => new BsonElement(field, "")));
+                }
+
                 var updateResult = await Collection(resource).UpdateOneAsync(
                     session,
-                    Builders<BsonDocument>.Filter.Eq("_id", oid),
-                    new BsonDocument("$set", updateDocument),
+                    Builders<BsonDocument>.Filter.Eq("_id", oid)
+                    & Builders<BsonDocument>.Filter.Ne("isDeleted", true),
+                    update,
                     cancellationToken: token);
 
                 if (updateResult.MatchedCount == 0)
@@ -193,6 +218,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     session,
                     resource,
                     afterDocument,
+                    existing,
                     token);
                 await WriteAuditAsync(
                     session,
@@ -222,7 +248,9 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         await EnsureCanDeleteAsync(resource, oid, ct);
 
         var existing = await Collection(resource)
-            .Find(Builders<BsonDocument>.Filter.Eq("_id", oid))
+            .Find(
+                Builders<BsonDocument>.Filter.Eq("_id", oid)
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
             .FirstOrDefaultAsync(ct) ?? throw new NotFoundException();
 
         var result = await InTransactionAsync(
@@ -230,11 +258,18 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             {
                 var updateResult = await Collection(resource).UpdateOneAsync(
                     session,
-                    Builders<BsonDocument>.Filter.Eq("_id", oid),
+                    Builders<BsonDocument>.Filter.Eq("_id", oid)
+                    & Builders<BsonDocument>.Filter.Ne("isDeleted", true),
                     Builders<BsonDocument>.Update
                         .Set("isDeleted", true)
                         .Set("updatedAt", DateTime.UtcNow),
                     cancellationToken: token);
+                await SetLinkedAccountDeletedStateAsync(
+                    session,
+                    resource,
+                    existing,
+                    deleted: true,
+                    token);
                 await WriteAuditAsync(
                     session,
                     actor,
@@ -259,7 +294,9 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     {
         var oid = ParseId(id);
         var existing = await Collection(resource)
-            .Find(Builders<BsonDocument>.Filter.Eq("_id", oid))
+            .Find(
+                Builders<BsonDocument>.Filter.Eq("_id", oid)
+                & Builders<BsonDocument>.Filter.Eq("isDeleted", true))
             .FirstOrDefaultAsync(ct) ?? throw new NotFoundException();
 
         await EnsureRestoreConflictsAsync(resource, existing, ct);
@@ -269,11 +306,18 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             {
                 var updateResult = await Collection(resource).UpdateOneAsync(
                     session,
-                    Builders<BsonDocument>.Filter.Eq("_id", oid),
+                    Builders<BsonDocument>.Filter.Eq("_id", oid)
+                    & Builders<BsonDocument>.Filter.Eq("isDeleted", true),
                     Builders<BsonDocument>.Update
                         .Set("isDeleted", false)
                         .Set("updatedAt", DateTime.UtcNow),
                     cancellationToken: token);
+                await SetLinkedAccountDeletedStateAsync(
+                    session,
+                    resource,
+                    existing,
+                    deleted: false,
+                    token);
                 await WriteAuditAsync(
                     session,
                     actor,
@@ -303,7 +347,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 academicYearId,
                 "năm học",
                 ct);
-            body["academicYearId"] = year["_id"].AsObjectId.ToString();
+            body["academicYearId"] = year["_id"];
             body["academicYearName"] = year.GetValue(
                 "academicYearName",
                 year.GetValue("academicYearCode", "")).AsString;
@@ -317,6 +361,13 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 ct);
             body.Remove("facultyId");
         }
+        else if (resource.Equals("courses", StringComparison.OrdinalIgnoreCase)
+                 && body.TryGetValue("facultyId", out var courseFaculty)
+                 && IsClearValue(courseFaculty))
+        {
+            body["faculty"] = null;
+            body.Remove("facultyId");
+        }
 
         if (resource.Equals("programs", StringComparison.OrdinalIgnoreCase)
             && TryId(body, "facultyId", out var programFacultyId))
@@ -324,6 +375,13 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             body["faculty"] = await BuildFacultySnapshotAsync(
                 programFacultyId,
                 ct);
+            body.Remove("facultyId");
+        }
+        else if (resource.Equals("programs", StringComparison.OrdinalIgnoreCase)
+                 && body.TryGetValue("facultyId", out var programFaculty)
+                 && IsClearValue(programFaculty))
+        {
+            body["faculty"] = null;
             body.Remove("facultyId");
         }
 
@@ -336,11 +394,23 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     ct);
                 body.Remove("facultyId");
             }
+            else if (body.TryGetValue("facultyId", out var studentFaculty)
+                     && IsClearValue(studentFaculty))
+            {
+                body["faculty"] = null;
+                body.Remove("facultyId");
+            }
             if (TryId(body, "programId", out var studentProgramId))
             {
                 body["program"] = await BuildProgramSnapshotAsync(
                     studentProgramId,
                     ct);
+                body.Remove("programId");
+            }
+            else if (body.TryGetValue("programId", out var studentProgram)
+                     && IsClearValue(studentProgram))
+            {
+                body["program"] = null;
                 body.Remove("programId");
             }
         }
@@ -353,6 +423,13 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 ct);
             body.Remove("facultyId");
         }
+        else if (resource.Equals("lecturers", StringComparison.OrdinalIgnoreCase)
+                 && body.TryGetValue("facultyId", out var lecturerFaculty)
+                 && IsClearValue(lecturerFaculty))
+        {
+            body["faculty"] = null;
+            body.Remove("facultyId");
+        }
 
         if (resource.Equals("class-sections", StringComparison.OrdinalIgnoreCase))
         {
@@ -363,7 +440,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     courseId,
                     "môn học",
                     ct);
-                body["courseId"] = course["_id"].AsObjectId.ToString();
+                body["courseId"] = course["_id"];
                 body["courseCode"] = course.GetValue("courseCode", "").AsString;
                 body["courseName"] = course.GetValue("courseName", "").AsString;
             }
@@ -375,7 +452,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     lecturerId,
                     "giảng viên",
                     ct);
-                body["lecturerId"] = lecturer["_id"].AsObjectId.ToString();
+                body["lecturerId"] = lecturer["_id"];
                 body["lecturerCode"] = lecturer.GetValue(
                     "lecturerCode",
                     "").AsString;
@@ -391,15 +468,16 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                     semesterId,
                     "học kỳ",
                     ct);
-                body["semesterId"] = semester["_id"].AsObjectId.ToString();
+                body["semesterId"] = semester["_id"];
                 body["semesterCode"] = semester.GetValue(
                     "semesterCode",
                     "").AsString;
                 body["semesterName"] = semester.GetValue(
                     "semesterName",
                     "").AsString;
-                body["academicYearId"] = IdAsString(
-                    semester.GetValue("academicYearId", BsonNull.Value));
+                body["academicYearId"] = semester.GetValue(
+                    "academicYearId",
+                    BsonNull.Value);
                 body["academicYearName"] = semester.GetValue(
                     "academicYearName",
                     "").AsString;
@@ -466,17 +544,57 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         CancellationToken ct)
     {
         var audienceType = GetString(body, "audienceType")?.Trim() ?? "All";
-        if (audienceType is not ("Faculty" or "ClassSection"))
+        if (audienceType.Equals(
+                "SpecificUsers",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var recipientIds = StringList(
+                    body.GetValueOrDefault("recipientIds"))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (recipientIds.Length == 0)
+                throw new AppException("Phải chọn ít nhất một người nhận thông báo");
+            if (recipientIds.Any(id => !ObjectId.TryParse(id, out _)))
+                throw new AppException("Danh sách người nhận chứa ID không hợp lệ");
+
+            var objectIds = recipientIds.Select(ObjectId.Parse).ToArray();
+            var users = db.Database.GetCollection<BsonDocument>("users");
+            var existingIds = await users.Find(
+                    Builders<BsonDocument>.Filter.In("_id", objectIds)
+                    & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
+                .Project(Builders<BsonDocument>.Projection.Include("_id"))
+                .ToListAsync(ct);
+            if (existingIds.Count != recipientIds.Length)
+                throw new AppException(
+                    "Một hoặc nhiều tài khoản nhận thông báo không tồn tại");
+
+            body["recipientIds"] = recipientIds;
+            body["audienceId"] = null;
+            body["audienceName"] = null;
             return;
+        }
+
+        if (!audienceType.Equals("Faculty", StringComparison.OrdinalIgnoreCase)
+            && !audienceType.Equals(
+                "ClassSection",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            body["recipientIds"] = Array.Empty<string>();
+            body["audienceId"] = null;
+            body["audienceName"] = null;
+            return;
+        }
 
         var audienceId = GetString(body, "audienceId");
         if (string.IsNullOrWhiteSpace(audienceId))
             throw new AppException("Phải chọn khoa hoặc lớp học phần nhận thông báo");
 
+        body["audienceId"] = ParseId(audienceId);
+
         var studentCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lecturerCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (audienceType == "Faculty")
+        if (audienceType.Equals("Faculty", StringComparison.OrdinalIgnoreCase))
         {
             var faculty = await FindRequiredAsync(
                 "faculties",
@@ -545,6 +663,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         IClientSessionHandle session,
         string resource,
         BsonDocument document,
+        BsonDocument? previousDocument,
         CancellationToken ct)
     {
         if (resource.Equals("students", StringComparison.OrdinalIgnoreCase))
@@ -554,6 +673,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 "Student",
                 "studentCode",
                 document.GetValue("studentCode", "").AsString,
+                previousDocument?.GetValue("studentCode", "").AsString,
                 document.GetValue("fullName", "").AsString,
                 document.GetValue("email", "").AsString,
                 document.GetValue("status", "Studying").AsString,
@@ -568,6 +688,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 "Lecturer",
                 "lecturerCode",
                 document.GetValue("lecturerCode", "").AsString,
+                previousDocument?.GetValue("lecturerCode", "").AsString,
                 document.GetValue("fullName", "").AsString,
                 document.GetValue("email", "").AsString,
                 document.GetValue("status", "Active").AsString,
@@ -608,15 +729,32 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         string role,
         string codeField,
         string code,
+        string? previousCode,
         string fullName,
         string email,
         string profileStatus,
         CancellationToken ct)
     {
-        var filter = Builders<BsonDocument>.Filter.Eq(codeField, code)
-            & Builders<BsonDocument>.Filter.Ne("isDeleted", true);
         var users = db.Database.GetCollection<BsonDocument>("users");
-        var existing = await users.Find(session, filter).FirstOrDefaultAsync(ct);
+        var activeFilter = Builders<BsonDocument>.Filter.Ne(
+            "isDeleted",
+            true);
+        BsonDocument? existing = null;
+        if (!string.IsNullOrWhiteSpace(previousCode))
+        {
+            existing = await users.Find(
+                    session,
+                    Builders<BsonDocument>.Filter.Eq(
+                        codeField,
+                        previousCode)
+                    & activeFilter)
+                .FirstOrDefaultAsync(ct);
+        }
+        existing ??= await users.Find(
+                session,
+                Builders<BsonDocument>.Filter.Eq(codeField, code)
+                & activeFilter)
+            .FirstOrDefaultAsync(ct);
 
         var active = profileStatus is not ("Inactive" or "Suspended" or "Graduated");
         if (existing is null)
@@ -643,16 +781,36 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
         }
 
+        var codeConflict = await users.Find(
+                session,
+                Builders<BsonDocument>.Filter.Eq(codeField, code)
+                & Builders<BsonDocument>.Filter.Ne("_id", existing["_id"])
+                & activeFilter)
+            .FirstOrDefaultAsync(ct);
+        if (codeConflict is not null)
+            throw new ConflictException(
+                $"Mã {code} đang được một tài khoản khác sử dụng");
+
+        var update = Builders<BsonDocument>.Update
+            .Set("fullName", fullName)
+            .Set("email", email.ToLowerInvariant())
+            .Set("role", role)
+            .Set("status", active ? "Active" : "Inactive")
+            .Set(codeField, code)
+            .Set("updatedAt", DateTime.UtcNow);
+        if (!string.IsNullOrWhiteSpace(previousCode)
+            && !previousCode.Equals(code, StringComparison.OrdinalIgnoreCase)
+            && existing.GetValue("username", "").AsString.Equals(
+                previousCode.ToLowerInvariant(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            update = update.Set("username", code.ToLowerInvariant());
+        }
+
         await users.UpdateOneAsync(
             session,
             Builders<BsonDocument>.Filter.Eq("_id", existing["_id"]),
-            Builders<BsonDocument>.Update
-                .Set("fullName", fullName)
-                .Set("email", email.ToLowerInvariant())
-                .Set("role", role)
-                .Set("status", active ? "Active" : "Inactive")
-                .Set(codeField, code)
-                .Set("updatedAt", DateTime.UtcNow),
+            update,
             cancellationToken: ct);
     }
 
@@ -713,6 +871,90 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             Builders<BsonDocument>.Update
                 .Set("fullName", user.GetValue("fullName", ""))
                 .Set("email", user.GetValue("email", ""))
+                .Set("updatedAt", DateTime.UtcNow),
+            cancellationToken: ct);
+    }
+
+    private async Task SetLinkedAccountDeletedStateAsync(
+        IClientSessionHandle session,
+        string resource,
+        BsonDocument profile,
+        bool deleted,
+        CancellationToken ct)
+    {
+        var (codeField, role, defaultStatus) = resource.ToLowerInvariant() switch
+        {
+            "students" => ("studentCode", "Student", "Studying"),
+            "lecturers" => ("lecturerCode", "Lecturer", "Active"),
+            _ => (string.Empty, string.Empty, string.Empty)
+        };
+        if (codeField.Length == 0)
+            return;
+
+        var code = profile.GetValue(codeField, "").AsString;
+        if (string.IsNullOrWhiteSpace(code))
+            return;
+
+        var users = db.Database.GetCollection<BsonDocument>("users");
+        var codeFilter = Builders<BsonDocument>.Filter.Eq(codeField, code);
+
+        if (deleted)
+        {
+            await users.UpdateManyAsync(
+                session,
+                codeFilter & Builders<BsonDocument>.Filter.Ne("isDeleted", true),
+                Builders<BsonDocument>.Update
+                    .Set("isDeleted", true)
+                    .Set("status", "Inactive")
+                    .Set("updatedAt", DateTime.UtcNow),
+                cancellationToken: ct);
+            return;
+        }
+
+        var account = await users.Find(session, codeFilter)
+            .Sort(Builders<BsonDocument>.Sort.Descending("updatedAt"))
+            .FirstOrDefaultAsync(ct);
+        if (account is null)
+        {
+            await EnsureLinkedUserAsync(
+                session,
+                role,
+                codeField,
+                code,
+                null,
+                profile.GetValue("fullName", "").AsString,
+                profile.GetValue("email", "").AsString,
+                profile.GetValue("status", defaultStatus).AsString,
+                ct);
+            return;
+        }
+
+        var email = profile.GetValue("email", "").AsString.ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var conflict = await users.Find(
+                    session,
+                    Builders<BsonDocument>.Filter.Eq("email", email)
+                    & Builders<BsonDocument>.Filter.Ne("_id", account["_id"])
+                    & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
+                .FirstOrDefaultAsync(ct);
+            if (conflict is not null)
+                throw new ConflictException(
+                    "Không thể khôi phục vì email đang được tài khoản khác sử dụng");
+        }
+
+        var profileStatus = profile.GetValue("status", defaultStatus).AsString;
+        var active = profileStatus is not ("Inactive" or "Suspended" or "Graduated");
+        await users.UpdateOneAsync(
+            session,
+            Builders<BsonDocument>.Filter.Eq("_id", account["_id"]),
+            Builders<BsonDocument>.Update
+                .Set("isDeleted", false)
+                .Set("status", active ? "Active" : "Inactive")
+                .Set("role", role)
+                .Set(codeField, code)
+                .Set("fullName", profile.GetValue("fullName", ""))
+                .Set("email", email)
                 .Set("updatedAt", DateTime.UtcNow),
             cancellationToken: ct);
     }
@@ -819,21 +1061,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
         }
 
-        string[] required = resource switch
-        {
-            "faculties" => ["facultyCode", "facultyName"],
-            "programs" => ["programCode", "programName"],
-            "academic-years" => ["academicYearCode", "academicYearName"],
-            "semesters" => ["semesterCode", "semesterName", "academicYearId"],
-            "courses" => ["courseCode", "courseName"],
-            "class-sections" => ["classSectionCode", "courseId", "lecturerId", "semesterId"],
-            "notifications" => ["title", "content"],
-            "system-settings" => ["key", "value"],
-            "users" => ["username", "email", "fullName", "role"],
-            "students" => ["studentCode", "fullName", "email"],
-            "lecturers" => ["lecturerCode", "fullName", "email"],
-            _ => []
-        };
+        var required = RequiredFields(resource);
 
         var missing = required
             .Where(field => !body.TryGetValue(field, out var value) || string.IsNullOrWhiteSpace(ValueAsString(value)))
@@ -852,6 +1080,101 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 throw new AppException("Tài khoản giảng viên phải có mã giảng viên");
         }
     }
+
+    private static void ValidateCompleteDocument(
+        string resource,
+        BsonDocument document)
+    {
+        var missing = RequiredFields(resource)
+            .Where(field =>
+                !document.TryGetValue(field, out var value)
+                || value.IsBsonNull
+                || (value.IsString && string.IsNullOrWhiteSpace(value.AsString)))
+            .ToList();
+        if (missing.Count > 0)
+            throw new AppException(
+                $"Không được xóa trường bắt buộc: {string.Join(", ", missing)}");
+
+        if (resource.Equals(
+                "academic-years",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateDateOrder(
+                document,
+                "startDate",
+                "endDate",
+                "Thời gian năm học");
+        }
+        else if (resource.Equals(
+                     "semesters",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateDateOrder(
+                document,
+                "startDate",
+                "endDate",
+                "Thời gian học kỳ");
+            ValidateDateOrder(
+                document,
+                "gradeEntryStart",
+                "gradeEntryEnd",
+                "Thời gian nhập điểm");
+        }
+        else if (resource.Equals(
+                     "class-sections",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateDateOrder(
+                document,
+                "startDate",
+                "endDate",
+                "Thời gian lớp học phần");
+        }
+        else if (resource.Equals(
+                     "notifications",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateDateOrder(
+                document,
+                "displayFrom",
+                "expiresAt",
+                "Thời gian hiển thị thông báo");
+        }
+
+        if (!resource.Equals("users", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var role = document.GetValue("role", "").AsString;
+        if (role == "Student"
+            && string.IsNullOrWhiteSpace(
+                document.GetValue("studentCode", "").AsString))
+            throw new AppException("Tài khoản sinh viên phải có mã sinh viên");
+        if (role == "Lecturer"
+            && string.IsNullOrWhiteSpace(
+                document.GetValue("lecturerCode", "").AsString))
+            throw new AppException("Tài khoản giảng viên phải có mã giảng viên");
+    }
+
+    private static string[] RequiredFields(string resource) => resource switch
+    {
+        "faculties" => ["facultyCode", "facultyName"],
+        "programs" => ["programCode", "programName"],
+        "academic-years" =>
+            ["academicYearCode", "academicYearName", "startDate", "endDate"],
+        "semesters" =>
+            [
+                "semesterCode", "semesterName", "academicYearId",
+                "startDate", "endDate"
+            ],
+        "courses" => ["courseCode", "courseName", "credits"],
+        "class-sections" => ["classSectionCode", "courseId", "lecturerId", "semesterId"],
+        "notifications" => ["title", "content"],
+        "system-settings" => ["key", "value"],
+        "users" => ["username", "email", "fullName", "role"],
+        "students" => ["studentCode", "fullName", "email"],
+        "lecturers" => ["lecturerCode", "fullName", "email"],
+        _ => []
+    };
 
     private static void ValidateSpecializedFields(
         string resource,
@@ -878,6 +1201,27 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             }
         }
 
+        if (resource is "users" or "students" or "lecturers")
+            ValidateEmail(body);
+
+        var status = GetString(body, "status");
+        var allowedStatuses = resource switch
+        {
+            "users" => new[] { "Active", "Inactive" },
+            "students" => new[] { "Studying", "Suspended", "Graduated" },
+            "class-sections" => new[]
+            {
+                "Draft", "Submitted", "Published", "Locked", "Reopened"
+            },
+            "faculties" or "programs" or "academic-years" or "semesters"
+                or "courses" or "lecturers" => new[] { "Active", "Inactive" },
+            _ => Array.Empty<string>()
+        };
+        if (status is not null
+            && allowedStatuses.Length > 0
+            && !allowedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
+            throw new AppException("Trạng thái dữ liệu không hợp lệ");
+
         if (resource.Equals("academic-years", StringComparison.OrdinalIgnoreCase))
             ValidateDateOrder(body, "startDate", "endDate", "Thời gian năm học");
 
@@ -892,7 +1236,55 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         }
 
         if (resource.Equals("class-sections", StringComparison.OrdinalIgnoreCase))
+        {
             ValidateDateOrder(body, "startDate", "endDate", "Thời gian lớp học phần");
+            ValidateIntegerField(body, "capacity", 1, 1000, "Sĩ số tối đa");
+        }
+
+        if (resource.Equals("courses", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateIntegerField(body, "credits", 1, 30, "Số tín chỉ");
+            ValidateIntegerField(
+                body,
+                "theoryPeriods",
+                0,
+                1000,
+                "Số tiết lý thuyết");
+            ValidateIntegerField(
+                body,
+                "practicePeriods",
+                0,
+                1000,
+                "Số tiết thực hành");
+        }
+
+        if (resource.Equals("programs", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateIntegerField(
+                body,
+                "requiredCredits",
+                0,
+                1000,
+                "Tổng tín chỉ");
+            ValidateIntegerField(
+                body,
+                "requiredCompulsoryCredits",
+                0,
+                1000,
+                "Tín chỉ bắt buộc");
+            ValidateIntegerField(
+                body,
+                "requiredElectiveCredits",
+                0,
+                1000,
+                "Tín chỉ tự chọn");
+            ValidateIntegerField(
+                body,
+                "durationYears",
+                1,
+                20,
+                "Số năm đào tạo");
+        }
 
         if (resource.Equals("notifications", StringComparison.OrdinalIgnoreCase))
         {
@@ -904,6 +1296,22 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             };
             if (!allowed.Contains(audienceType, StringComparer.OrdinalIgnoreCase))
                 throw new AppException("Phạm vi người nhận thông báo không hợp lệ");
+
+            var notificationStatus = GetString(body, "status");
+            if (notificationStatus is not null && notificationStatus is not ("Draft" or "Sent"))
+                throw new AppException("Trạng thái thông báo không hợp lệ");
+            var priority = GetString(body, "priority");
+            if (priority is not null && priority is not ("Low" or "Normal" or "High"))
+                throw new AppException("Mức ưu tiên thông báo không hợp lệ");
+            var type = GetString(body, "type");
+            if (type is not null
+                && type is not ("General" or "Academic" or "Grade" or "Emergency"))
+                throw new AppException("Loại thông báo không hợp lệ");
+            ValidateDateOrder(
+                body,
+                "displayFrom",
+                "expiresAt",
+                "Thời gian hiển thị thông báo");
         }
 
         if (resource.Equals("system-settings", StringComparison.OrdinalIgnoreCase))
@@ -921,6 +1329,20 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
         if (start >= end)
             throw new AppException($"{label}: ngày bắt đầu phải trước ngày kết thúc");
+    }
+
+    private static void ValidateDateOrder(
+        BsonDocument document,
+        string startKey,
+        string endKey,
+        string label)
+    {
+        if (!TryDate(document, startKey, out var start)
+            || !TryDate(document, endKey, out var end))
+            return;
+        if (start >= end)
+            throw new AppException(
+                $"{label}: ngày bắt đầu phải trước ngày kết thúc");
     }
 
     private static void ValidateSystemSetting(
@@ -944,6 +1366,30 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             throw new AppException("Giá trị cấu hình bật/tắt phải là true hoặc false");
     }
 
+    private static void ValidateEmail(Dictionary<string, object?> body)
+    {
+        var email = GetString(body, "email")?.Trim();
+        if (string.IsNullOrWhiteSpace(email))
+            return;
+        if (!System.Net.Mail.MailAddress.TryCreate(email, out var parsed)
+            || !parsed.Address.Equals(email, StringComparison.OrdinalIgnoreCase))
+            throw new AppException("Địa chỉ email không hợp lệ");
+    }
+
+    private static void NormalizeRolePermissions(
+        string resource,
+        Dictionary<string, object?> body,
+        BsonDocument? existing = null)
+    {
+        if (!resource.Equals("users", StringComparison.OrdinalIgnoreCase))
+            return;
+        var role = GetString(body, "role")
+            ?? existing?.GetValue("role", "").AsString;
+        if (role is not null
+            && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            body["permissions"] = Array.Empty<string>();
+    }
+
     private static void ValidateNumberRange(
         string raw,
         double minimum,
@@ -955,10 +1401,29 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var value)
+            || !double.IsFinite(value)
             || value < minimum
             || value > maximum)
             throw new AppException(
                 $"{label} phải nằm trong khoảng {minimum:0.##}–{maximum:0.##}");
+    }
+
+    private static void ValidateIntegerField(
+        Dictionary<string, object?> body,
+        string key,
+        long minimum,
+        long maximum,
+        string label)
+    {
+        if (!body.TryGetValue(key, out var raw) || IsClearValue(raw))
+            return;
+        if (!long.TryParse(ValueAsString(raw), out var value)
+            || value < minimum
+            || value > maximum)
+        {
+            throw new AppException(
+                $"{label} phải là số nguyên từ {minimum} đến {maximum}");
+        }
     }
 
     private static bool TryDate(
@@ -969,6 +1434,22 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         value = default;
         return body.TryGetValue(key, out var raw)
             && DateTime.TryParse(ValueAsString(raw), out value);
+    }
+
+    private static bool TryDate(
+        BsonDocument document,
+        string key,
+        out DateTime value)
+    {
+        value = default;
+        if (!document.TryGetValue(key, out var raw) || raw.IsBsonNull)
+            return false;
+        if (raw.IsBsonDateTime)
+        {
+            value = raw.AsBsonDateTime.ToUniversalTime();
+            return true;
+        }
+        return raw.IsString && DateTime.TryParse(raw.AsString, out value);
     }
 
     private static void SanitizeBody(string resource, Dictionary<string, object?> body)
@@ -1042,7 +1523,8 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         foreach (var field in fields)
         {
             if (!body.TryGetValue(field, out var raw) || string.IsNullOrWhiteSpace(ValueAsString(raw))) continue;
-            var filter = Builders<BsonDocument>.Filter.Eq(field, ConvertValue(raw));
+            var filter = Builders<BsonDocument>.Filter.Eq(field, ConvertValue(raw))
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true);
             if (!string.IsNullOrWhiteSpace(currentId))
                 filter &= Builders<BsonDocument>.Filter.Ne("_id", ParseId(currentId));
 
@@ -1055,7 +1537,8 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             body.TryGetValue("academicYearId", out var academicYearId))
         {
             var filter = Builders<BsonDocument>.Filter.Eq("semesterCode", ConvertValue(semesterCode)) &
-                         Builders<BsonDocument>.Filter.Eq("academicYearId", ConvertValue(academicYearId));
+                         Builders<BsonDocument>.Filter.Eq("academicYearId", ConvertValue(academicYearId)) &
+                         Builders<BsonDocument>.Filter.Ne("isDeleted", true);
             if (!string.IsNullOrWhiteSpace(currentId))
                 filter &= Builders<BsonDocument>.Filter.Ne("_id", ParseId(currentId));
             if (await Collection(resource).Find(filter).FirstOrDefaultAsync(ct) is not null)
@@ -1109,7 +1592,14 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         foreach (var (collectionName, field) in references)
         {
             var collection = db.Database.GetCollection<BsonDocument>(collectionName);
-            var filter = Builders<BsonDocument>.Filter.In(field, new BsonValue[] { new BsonObjectId(id), new BsonString(id.ToString()) });
+            var filter = Builders<BsonDocument>.Filter.In(
+                    field,
+                    new BsonValue[]
+                    {
+                        new BsonObjectId(id),
+                        new BsonString(id.ToString())
+                    })
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true);
             if (await collection.Find(filter).FirstOrDefaultAsync(ct) is not null)
                 throw new AppException("Không thể xóa vì dữ liệu đang được sử dụng. Hãy ngừng hoạt động hoặc đóng dữ liệu thay vì xóa.", 409);
         }
@@ -1235,6 +1725,16 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
 
         FlattenSnapshot(result, document, "faculty", "facultyId", "facultyName");
         FlattenSnapshot(result, document, "program", "programId", "programName");
+        foreach (var field in new[]
+                 {
+                     "academicYearId", "courseId", "lecturerId", "semesterId",
+                     "audienceId"
+                 })
+        {
+            if (document.TryGetValue(field, out var value)
+                && !value.IsBsonNull)
+                result[field] = IdAsString(value);
+        }
         return result;
     }
 
@@ -1256,8 +1756,24 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     }
 
     private static BsonDocument ToBson(Dictionary<string, object?> values) =>
-        new(values.Where(pair => pair.Value is not null)
+        new(values.Where(pair => !IsClearValue(pair.Value))
             .Select(pair => new BsonElement(pair.Key, ConvertValue(pair.Value))));
+
+    private static bool IsClearValue(object? value)
+    {
+        if (value is null)
+            return true;
+        if (value is string text)
+            return string.IsNullOrWhiteSpace(text);
+        if (value is System.Text.Json.JsonElement json)
+        {
+            return json.ValueKind is System.Text.Json.JsonValueKind.Null
+                    or System.Text.Json.JsonValueKind.Undefined
+                || (json.ValueKind == System.Text.Json.JsonValueKind.String
+                    && string.IsNullOrWhiteSpace(json.GetString()));
+        }
+        return false;
+    }
 
     private static BsonValue ConvertValue(object? value)
     {

@@ -205,6 +205,16 @@ export class StudentAssignmentsComponent implements OnInit {
     const open = new Date(item.openAt).getTime();
     const due = new Date(item.dueAt).getTime();
     if (item.status !== 'Open' || now < open) return false;
+    if (
+      item.studentSubmissionStatus
+      && ['Graded', 'Accepted'].includes(item.studentSubmissionStatus)
+      && !item.studentResubmissionAllowed
+    ) {
+      return false;
+    }
+    if (item.studentSubmissionStatus && now > due && !item.studentResubmissionAllowed) {
+      return false;
+    }
     return now <= due || item.allowLate;
   }
 
@@ -254,6 +264,7 @@ export class StudentAssignmentsComponent implements OnInit {
   }
 
   submit(): void {
+    if (this.submitting()) return;
     const assignment = this.selected();
     if (!assignment) return;
     if (!this.textContent.trim() && this.selectedFiles.length === 0) {

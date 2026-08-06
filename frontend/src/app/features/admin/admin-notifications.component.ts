@@ -24,7 +24,7 @@ interface NotificationOptions {
     <app-page-header
       title="Quản lý thông báo"
       subtitle="Gửi thông báo theo vai trò, lớp, khoa hoặc người dùng cụ thể.">
-      <button class="primary-button" (click)="open()">
+      <button class="primary-button" [disabled]="deletedOnly() || saving()" (click)="open()">
         <span class="material-symbols-outlined">add_alert</span> Tạo thông báo
       </button>
     </app-page-header>
@@ -35,6 +35,12 @@ interface NotificationOptions {
           <span class="material-symbols-outlined">search</span>
           <input [(ngModel)]="search" (keyup.enter)="load()" placeholder="Tìm theo tiêu đề..."/>
           <button (click)="load()">Tìm</button>
+        </div>
+        <div class="inline-actions">
+          <button class="secondary-button" [class.danger]="deletedOnly()" (click)="toggleTrash()">
+            <span class="material-symbols-outlined">{{ deletedOnly() ? 'arrow_back' : 'delete_sweep' }}</span>
+            {{ deletedOnly() ? 'Quay lại danh sách' : 'Thùng rác' }}
+          </button>
         </div>
       </div>
       <div class="table-wrap">
@@ -50,8 +56,14 @@ interface NotificationOptions {
                 <td><span class="badge" [class.success]="item['status'] === 'Sent'">{{item['status']}}</span></td>
                 <td>{{item['createdAt'] | date:'dd/MM/yyyy HH:mm'}}</td>
                 <td>
-                  <button class="icon-button" (click)="open(item)"><span class="material-symbols-outlined">edit</span></button>
-                  <button class="icon-button danger" (click)="remove(item)"><span class="material-symbols-outlined">delete</span></button>
+                  @if (deletedOnly()) {
+                    <button class="secondary-button small-button" [disabled]="!!workingId()" (click)="restore(item)">
+                      <span class="material-symbols-outlined">settings_backup_restore</span> Khôi phục
+                    </button>
+                  } @else {
+                    <button class="icon-button" [disabled]="!!workingId()" (click)="open(item)"><span class="material-symbols-outlined">edit</span></button>
+                    <button class="icon-button danger" [disabled]="!!workingId()" (click)="remove(item)"><span class="material-symbols-outlined">delete</span></button>
+                  }
                 </td>
               </tr>
             } @empty {
@@ -63,11 +75,11 @@ interface NotificationOptions {
     </article>
 
     @if (modal()) {
-      <div class="modal-backdrop" (click)="modal.set(false)">
+      <div class="modal-backdrop" (click)="!saving() && modal.set(false)">
         <form class="modal" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
           <div class="modal-heading">
             <div><h3>{{form.id ? 'Cập nhật' : 'Tạo'}} thông báo</h3><p>Thông báo được hiển thị theo phạm vi người nhận.</p></div>
-            <button type="button" class="icon-button" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button>
+            <button type="button" class="icon-button" [disabled]="saving()" (click)="modal.set(false)"><span class="material-symbols-outlined">close</span></button>
           </div>
           <div class="form-grid">
             <label class="full-row">Tiêu đề<input [(ngModel)]="form.title" name="title" required/></label>
@@ -115,8 +127,8 @@ interface NotificationOptions {
             <label>Hết hạn<input type="datetime-local" [(ngModel)]="form.expiresAt" name="expiresAt"/></label>
           </div>
           <div class="modal-actions">
-            <button type="button" class="secondary-button" (click)="modal.set(false)">Hủy</button>
-            <button class="primary-button">Lưu thông báo</button>
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="modal.set(false)">Hủy</button>
+            <button class="primary-button" type="submit" [disabled]="saving()">{{ saving() ? 'Đang lưu...' : 'Lưu thông báo' }}</button>
           </div>
         </form>
       </div>
@@ -128,6 +140,9 @@ export class AdminNotificationsComponent implements OnInit {
   faculties = signal<LookupOption[]>([]);
   classSections = signal<LookupOption[]>([]);
   modal = signal(false);
+  saving = signal(false);
+  workingId = signal('');
+  deletedOnly = signal(false);
   search = '';
   recipients = '';
   audienceId = '';
@@ -144,7 +159,8 @@ export class AdminNotificationsComponent implements OnInit {
     this.api.get<PagedResult<Record<string, any>>>('/admin/notifications', {
       pageNumber: 1,
       pageSize: 100,
-      search: this.search
+      search: this.search,
+      deletedOnly: this.deletedOnly()
     }).subscribe({
       next: response => this.items.set(response.data.items ?? []),
       error: error => {
@@ -158,6 +174,7 @@ export class AdminNotificationsComponent implements OnInit {
   }
 
   open(item?: Record<string, any>) {
+    if (this.saving() || this.deletedOnly()) return;
     this.form = item
       ? { ...item, displayFrom: this.localDate(item['displayFrom']), expiresAt: this.localDate(item['expiresAt']) }
       : this.empty();
@@ -167,49 +184,118 @@ export class AdminNotificationsComponent implements OnInit {
   }
 
   save() {
+    if (this.saving()) return;
+    const title = String(this.form.title ?? '').trim();
+    const content = String(this.form.content ?? '').trim();
+    if (!title || !content) {
+      this.toast.show('Vui lòng nhập tiêu đề và nội dung thông báo', 'error');
+      return;
+    }
     if ((this.form.audienceType === 'Faculty' || this.form.audienceType === 'ClassSection') && !this.audienceId) {
       this.toast.show('Vui lòng chọn phạm vi người nhận', 'error');
+      return;
+    }
+    const recipientIds = this.recipients
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+    if (this.form.audienceType === 'SpecificUsers') {
+      if (recipientIds.length === 0) {
+        this.toast.show('Vui lòng nhập ít nhất một ID người nhận', 'error');
+        return;
+      }
+      if (recipientIds.some(value => !/^[a-f\d]{24}$/i.test(value))) {
+        this.toast.show('ID người nhận phải là ObjectId MongoDB gồm 24 ký tự', 'error');
+        return;
+      }
+    }
+    const displayFrom = new Date(this.form.displayFrom);
+    const expiresAt = this.form.expiresAt
+      ? new Date(this.form.expiresAt)
+      : null;
+    if (Number.isNaN(displayFrom.getTime())) {
+      this.toast.show('Thời điểm bắt đầu hiển thị không hợp lệ', 'error');
+      return;
+    }
+    if (expiresAt && (Number.isNaN(expiresAt.getTime()) || expiresAt <= displayFrom)) {
+      this.toast.show('Thời điểm hết hạn phải sau thời điểm hiển thị', 'error');
       return;
     }
 
     const id = this.form.id;
     const body = {
-      ...this.form,
-      audienceId: this.audienceId,
+      title,
+      content,
+      type: this.form.type,
+      priority: this.form.priority,
+      audienceType: this.form.audienceType,
+      status: this.form.status,
+      audienceId: this.audienceId || null,
       recipientIds: this.form.audienceType === 'SpecificUsers'
-        ? this.recipients.split(',').map(value => value.trim()).filter(Boolean)
+        ? recipientIds
         : [],
-      readBy: this.form.readBy || [],
-      displayFrom: new Date(this.form.displayFrom).toISOString(),
-      expiresAt: this.form.expiresAt ? new Date(this.form.expiresAt).toISOString() : null
+      displayFrom: displayFrom.toISOString(),
+      expiresAt: expiresAt?.toISOString() ?? null
     };
-    delete body.id;
 
+    this.saving.set(true);
     const call = id
       ? this.api.put(`/admin/notifications/${id}`, body)
       : this.api.post('/admin/notifications', body);
     call.subscribe({
       next: () => {
+        this.saving.set(false);
         this.toast.show('Đã lưu thông báo', 'success');
         this.modal.set(false);
         this.load();
       },
-      error: error => this.toast.show(error.error?.message || 'Không thể lưu thông báo', 'error')
+      error: error => {
+        this.saving.set(false);
+        this.toast.show(error.error?.message || 'Không thể lưu thông báo', 'error');
+      }
     });
   }
 
   remove(item: Record<string, any>) {
+    if (this.workingId()) return;
     if (!confirm('Xóa thông báo này?')) return;
+    this.workingId.set(item['id']);
     this.api.delete(`/admin/notifications/${item['id']}`).subscribe({
       next: () => {
+        this.workingId.set('');
         this.toast.show('Đã xóa thông báo', 'success');
         this.load();
       },
-      error: error => this.toast.show(
-        error.error?.message || 'Không thể xóa thông báo',
-        'error'
-      )
+      error: error => {
+        this.workingId.set('');
+        this.toast.show(
+          error.error?.message || 'Không thể xóa thông báo',
+          'error'
+        );
+      }
     });
+  }
+
+  restore(item: Record<string, any>) {
+    if (this.workingId()) return;
+    if (!confirm('Khôi phục thông báo này?')) return;
+    this.workingId.set(item['id']);
+    this.api.post(`/admin/notifications/${item['id']}/restore`, {}).subscribe({
+      next: () => {
+        this.workingId.set('');
+        this.toast.show('Đã khôi phục thông báo', 'success');
+        this.load();
+      },
+      error: error => {
+        this.workingId.set('');
+        this.toast.show(error.error?.message || 'Không thể khôi phục thông báo', 'error');
+      }
+    });
+  }
+
+  toggleTrash() {
+    this.deletedOnly.update(value => !value);
+    this.load();
   }
 
   audienceLabel(item: Record<string, any>) {

@@ -23,7 +23,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
             .GroupBy(x => new { x.Year.AcademicYearName, x.Semester.SemesterCode, x.Semester.SemesterName })
             .OrderByDescending(x => x.Key.AcademicYearName)
             .ThenByDescending(x => ParseSemesterNumber(x.Key.SemesterName))
-            .FirstOrDefault(x => x.Any(item => item.Course.ScoreStatus != "Published"))
+            .FirstOrDefault(x => x.Any(item => !IsPublished(item.Course.ScoreStatus)))
             ?? allRecords.GroupBy(x => new { x.Year.AcademicYearName, x.Semester.SemesterCode, x.Semester.SemesterName })
                 .OrderByDescending(x => x.Key.AcademicYearName)
                 .ThenByDescending(x => ParseSemesterNumber(x.Key.SemesterName))
@@ -122,8 +122,8 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
                 var items = group.OrderBy(x => x.Group == "Required" ? 0 : 1).ThenBy(x => x.CourseCode).Select(item =>
                 {
                     latestRecords.TryGetValue(item.CourseCode, out var record);
-                    var finalScore = record is not null && record.ScoreStatus == "Published" ? CalculateFinalScore(record) : (double?)null;
-                    var status = record is null ? "NotRegistered" : record.ScoreStatus == "Published" ? (finalScore >= 4 ? "Passed" : "Failed") : "InProgress";
+                    var finalScore = record is not null && IsPublished(record.ScoreStatus) ? CalculateFinalScore(record) : (double?)null;
+                    var status = record is null ? "NotRegistered" : IsPublished(record.ScoreStatus) ? (finalScore >= 4 ? "Passed" : "Failed") : "InProgress";
                     return new CurriculumCourseDto(
                         ++order,
                         item.CourseCode,
@@ -149,7 +149,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
             }).ToList();
 
         var completedCredits = latestRecords.Values
-            .Where(x => x.ScoreStatus == "Published" && !x.ExcludeFromGpa && CalculateFinalScore(x) >= 4)
+            .Where(x => IsPublished(x.ScoreStatus) && !x.ExcludeFromGpa && CalculateFinalScore(x) >= 4)
             .GroupBy(x => x.CourseCode)
             .Sum(x => x.First().Credits);
         return new StudentCurriculumDto(
@@ -174,7 +174,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
             .SelectMany(year => year.Semesters.Select(semester => new { Year = year.AcademicYearName, Semester = semester }))
             .OrderByDescending(x => x.Year)
             .ThenByDescending(x => ParseSemesterNumber(x.Semester.SemesterName))
-            .FirstOrDefault(x => x.Semester.Courses.Any(course => course.ScoreStatus != "Published"))
+            .FirstOrDefault(x => x.Semester.Courses.Any(course => !IsPublished(course.ScoreStatus)))
             ?? student.AcademicRecords
                 .SelectMany(year => year.Semesters.Select(semester => new { Year = year.AcademicYearName, Semester = semester }))
                 .OrderByDescending(x => x.Year)
@@ -220,7 +220,9 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
         var student = await RequireStudentAsync(studentCode, ct);
         var sectionIds = await GetStudentSectionIdsAsync(studentCode, ct);
         if (!string.IsNullOrWhiteSpace(classSectionId) && !sectionIds.Contains(classSectionId)) throw new NotFoundException("Không tìm thấy lớp học phần của sinh viên");
-        var filter = Builders<Assignment>.Filter.In(x => x.ClassSectionId, string.IsNullOrWhiteSpace(classSectionId) ? sectionIds : [classSectionId]) & Builders<Assignment>.Filter.Eq(x => x.IsDeleted, false);
+        var filter = Builders<Assignment>.Filter.In(x => x.ClassSectionId, string.IsNullOrWhiteSpace(classSectionId) ? sectionIds : [classSectionId])
+                     & Builders<Assignment>.Filter.Eq(x => x.IsDeleted, false)
+                     & Builders<Assignment>.Filter.In(x => x.Status, ["Open", "Closed"]);
         var assignments = await db.Assignments.Find(filter).SortBy(x => x.DueAt).ToListAsync(ct);
         var assignmentIds = assignments.Select(x => x.Id).ToList();
         var submissions = await db.Submissions.Find(Builders<Submission>.Filter.In(x => x.AssignmentId, assignmentIds) & Builders<Submission>.Filter.Eq(x => x.StudentId, student.Id) & Builders<Submission>.Filter.Eq(x => x.IsDeleted, false)).ToListAsync(ct);
@@ -228,7 +230,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
         return assignments.Select(x =>
         {
             lookup.TryGetValue(x.Id, out var submission);
-            return new AssignmentDto(x.Id, x.ClassSectionId, x.ClassSectionCode, x.CourseCode, x.CourseName, x.Title, x.Content, x.AttachmentUrl, x.MaxScore, x.OpenAt, x.DueAt, x.AllowLate, x.LatePenaltyPercent, x.CloCodes, x.LinkedComponentId, x.Status, 0, submission?.Status, submission?.Score, submission?.Feedback);
+            return new AssignmentDto(x.Id, x.ClassSectionId, x.ClassSectionCode, x.CourseCode, x.CourseName, x.Title, x.Content, x.AttachmentUrl, x.MaxScore, x.OpenAt, x.DueAt, x.AllowLate, x.LatePenaltyPercent, x.CloCodes, x.LinkedComponentId, x.Status, 0, submission?.Status, submission?.Score, submission?.Feedback, submission?.ResubmissionAllowed ?? false);
         }).ToList();
     }
 
@@ -238,11 +240,22 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
         var assignment = await db.Assignments.Find(x => x.Id == assignmentId && !x.IsDeleted).FirstOrDefaultAsync(ct) ?? throw new NotFoundException("Không tìm thấy bài tập");
         var sectionIds = await GetStudentSectionIdsAsync(studentCode, ct);
         if (!sectionIds.Contains(assignment.ClassSectionId)) throw new NotFoundException("Bài tập không thuộc lớp của sinh viên");
+        if (assignment.Status != "Open")
+            throw new ConflictException("Bài tập hiện không mở để nhận bài nộp");
+        if (string.IsNullOrWhiteSpace(request.TextContent) && files.Count == 0)
+            throw new AppException("Hãy nhập nội dung hoặc chọn ít nhất một tệp");
         var now = DateTime.UtcNow;
         if (now < assignment.OpenAt) throw new AppException("Bài tập chưa mở");
         if (now > assignment.DueAt && !assignment.AllowLate) throw new AppException("Đã quá hạn nộp bài");
         var current = await db.Submissions.Find(x => x.AssignmentId == assignmentId && x.StudentId == student.Id && !x.IsDeleted).SortByDescending(x => x.SubmittedAt).FirstOrDefaultAsync(ct);
-        if (current is not null && now > assignment.DueAt && !current.ResubmissionAllowed) throw new AppException("Không được phép thay thế bài nộp sau hạn");
+        if (current is not null
+            && current.Status is ("Graded" or "Accepted")
+            && !current.ResubmissionAllowed)
+            throw new ConflictException("Giảng viên chưa cho phép nộp lại bài đã chấm");
+        if (current is not null
+            && now > assignment.DueAt
+            && !current.ResubmissionAllowed)
+            throw new ConflictException("Không được phép thay thế bài nộp sau hạn");
         var savedFiles = new List<SubmissionFile>();
         foreach (var file in files)
         {
@@ -258,7 +271,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
             savedFiles.Add(new SubmissionFile { OriginalName = Path.GetFileName(file.FileName), StoredName = storedName, Url = $"/uploads/submissions/{assignment.Id}/{student.StudentCode}/{storedName}", SizeBytes = file.Length, MimeType = file.ContentType });
         }
         var submission = current ?? new Submission { AssignmentId = assignment.Id, ClassSectionId = assignment.ClassSectionId, StudentId = student.Id, StudentCode = student.StudentCode, StudentName = student.FullName };
-        submission.TextContent = request.TextContent;
+        submission.TextContent = request.TextContent?.Trim() ?? string.Empty;
         if (savedFiles.Count > 0) submission.Files = savedFiles;
         submission.SubmittedAt = now;
         submission.IsLate = now > assignment.DueAt;
@@ -266,6 +279,7 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
         submission.Score = null;
         submission.Feedback = "";
         submission.GradedAt = null;
+        submission.ResubmissionAllowed = false;
         submission.UpdatedAt = now;
         if (current is null) await db.Submissions.InsertOneAsync(submission, cancellationToken: ct);
         else await db.Submissions.ReplaceOneAsync(x => x.Id == submission.Id, submission, cancellationToken: ct);
@@ -317,9 +331,12 @@ public sealed class StudentPortalService(MongoContext db, IStudentAnalyticsServi
 
     private static bool IsSemesterComplete(SemesterRecord semester) =>
         semester.Courses.Count > 0 && semester.Courses.All(course =>
-            course.ScoreStatus == "Published" &&
+            IsPublished(course.ScoreStatus) &&
             course.Scores.Count > 0 &&
             course.Scores.All(score => score.Status == "Graded" && score.Score.HasValue));
+
+    private static bool IsPublished(string status) =>
+        status is "Published" or "Locked";
 
     private static double CalculateFinalScore(StudentCourseRecord course)
     {

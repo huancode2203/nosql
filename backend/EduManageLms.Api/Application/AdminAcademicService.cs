@@ -451,7 +451,7 @@ public sealed class AdminAcademicService(MongoContext db) : IAdminAcademicServic
             BsonDocument.Parse(
                 "{ $match: { " +
                 "'academicRecords.semesters.courses.scoreStatus': " +
-                "'Published' } }"),
+                "{ $in: ['Published', 'Locked'] } } }"),
             BsonDocument.Parse(
                 "{ $unwind: " +
                 "'$academicRecords.semesters.courses.scores' }"),

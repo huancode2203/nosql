@@ -1,6 +1,6 @@
 <app-page-header [title]="title()" [subtitle]="subtitle()">
   @if (canWrite()) {
-    <button class="primary-button" (click)="open()" [disabled]="deletedOnly()">
+    <button class="primary-button" (click)="open()" [disabled]="deletedOnly() || saving()">
       <span class="material-symbols-outlined">add</span>
       Thêm mới
     </button>
@@ -84,19 +84,21 @@
                 @if (deletedOnly() && canDelete()) {
                   <button
                     class="secondary-button small-button"
+                    [disabled]="!!workingId()"
                     (click)="restore(item)">
                     <span class="material-symbols-outlined">settings_backup_restore</span>
                     Khôi phục
                   </button>
                 } @else if (!deletedOnly()) {
                   @if (canWrite()) {
-                  <button class="icon-button" (click)="open(item)" title="Sửa">
+                  <button class="icon-button" [disabled]="!!workingId()" (click)="open(item)" title="Sửa">
                     <span class="material-symbols-outlined">edit</span>
                   </button>
                   }
                   @if (canDelete()) {
                   <button
                     class="icon-button danger"
+                    [disabled]="!!workingId()"
                     (click)="remove(item)"
                     title="Xóa mềm">
                     <span class="material-symbols-outlined">delete</span>
@@ -127,7 +129,7 @@
       </button>
       <b>Trang {{ page }}</b>
       <button
-        [disabled]="items().length < 20"
+        [disabled]="page * pageSize >= total"
         (click)="page = page + 1; load()">
         Sau
       </button>
@@ -136,7 +138,7 @@
 </article>
 
 @if (modal()) {
-  <div class="modal-backdrop" (click)="modal.set(false)">
+  <div class="modal-backdrop" (click)="!saving() && modal.set(false)">
     <form
       class="modal wide-modal"
       (click)="$event.stopPropagation()"
@@ -149,6 +151,7 @@
         <button
           type="button"
           class="icon-button"
+          [disabled]="saving()"
           (click)="modal.set(false)">
           <span class="material-symbols-outlined">close</span>
         </button>
@@ -168,6 +171,7 @@
                     <label class="checkbox-row">
                       <input
                         type="checkbox"
+                        [disabled]="saving()"
                         [checked]="hasPermission(permission.value)"
                         (change)="togglePermission(permission.value, $any($event.target).checked)">
                       <span>{{ permission.label }}</span>
@@ -179,6 +183,7 @@
               <label class="checkbox-row">
                 <input
                   type="checkbox"
+                  [disabled]="saving()"
                   [ngModel]="!!editing()[field.key]"
                   (ngModelChange)="updateField(field.key, $event)"
                   [ngModelOptions]="{ standalone: true }">
@@ -193,6 +198,7 @@
 
                 @if (field.type === 'select') {
                   <select
+                    [disabled]="saving()"
                     [ngModel]="editing()[field.key]"
                     (ngModelChange)="updateField(field.key, $event)"
                     [ngModelOptions]="{ standalone: true }"
@@ -204,7 +210,9 @@
                   </select>
                 } @else {
                   <input
+                    [disabled]="saving()"
                     [type]="field.type || 'text'"
+                    [attr.step]="field.type === 'number' ? '1' : null"
                     [ngModel]="editing()[field.key]"
                     (ngModelChange)="updateField(field.key, $event)"
                     [ngModelOptions]="{ standalone: true }"
@@ -262,10 +270,13 @@
         <button
           type="button"
           class="secondary-button"
+          [disabled]="saving()"
           (click)="modal.set(false)">
           Hủy
         </button>
-        <button class="primary-button">Lưu dữ liệu</button>
+        <button class="primary-button" type="submit" [disabled]="saving()">
+          {{ saving() ? 'Đang lưu...' : 'Lưu dữ liệu' }}
+        </button>
       </div>
     </form>
   </div>

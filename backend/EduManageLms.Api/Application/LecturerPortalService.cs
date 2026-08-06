@@ -152,7 +152,16 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
     public async Task<MaterialDto> SaveMaterialAsync(string lecturerCode, string? id, MaterialUpsertRequest request, CancellationToken ct)
     {
         var section = await RequireSectionAsync(lecturerCode, request.ClassSectionId, ct);
-        if (string.IsNullOrWhiteSpace(request.Title)) throw new AppException("Tiêu đề tài liệu là bắt buộc");
+        if (string.IsNullOrWhiteSpace(request.Title))
+            throw new AppException("Tiêu đề tài liệu là bắt buộc");
+        if (string.IsNullOrWhiteSpace(request.ResourceUrl))
+            throw new AppException("Đường dẫn tài liệu là bắt buộc");
+        if (request.Status is not ("Draft" or "Published" or "Hidden"))
+            throw new AppException("Trạng thái tài liệu không hợp lệ");
+        var visibleFrom = request.VisibleFrom ?? DateTime.UtcNow;
+        if (request.VisibleUntil.HasValue
+            && request.VisibleUntil.Value <= visibleFrom)
+            throw new AppException("Thời điểm ẩn tài liệu phải sau thời điểm hiển thị");
         LearningMaterial item;
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -163,18 +172,31 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
             item = await db.Materials.Find(x => x.Id == id && x.LecturerCode == lecturerCode && !x.IsDeleted).FirstOrDefaultAsync(ct)
                    ?? throw new NotFoundException("Không tìm thấy tài liệu");
         }
+        item.ClassSectionId = section.Id;
+        item.ClassSectionCode = section.ClassSectionCode;
+        item.CourseCode = section.CourseCode;
+        item.CourseName = section.CourseName;
+        item.LecturerCode = lecturerCode;
         item.Title = request.Title.Trim();
-        item.Description = request.Description;
-        item.Category = request.Category;
-        item.Chapter = request.Chapter;
-        item.ResourceType = request.ResourceType;
-        item.ResourceUrl = request.ResourceUrl;
-        item.VisibleFrom = request.VisibleFrom ?? DateTime.UtcNow;
+        item.Description = request.Description?.Trim() ?? string.Empty;
+        item.Category = request.Category?.Trim() ?? string.Empty;
+        item.Chapter = request.Chapter?.Trim() ?? string.Empty;
+        item.ResourceType = request.ResourceType?.Trim() ?? "Link";
+        item.ResourceUrl = request.ResourceUrl.Trim();
+        item.VisibleFrom = visibleFrom;
         item.VisibleUntil = request.VisibleUntil;
         item.Status = request.Status;
         item.UpdatedAt = DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(id)) await db.Materials.InsertOneAsync(item, cancellationToken: ct);
-        else await db.Materials.ReplaceOneAsync(x => x.Id == item.Id, item, cancellationToken: ct);
+        else
+        {
+            var result = await db.Materials.ReplaceOneAsync(
+                x => x.Id == item.Id && x.LecturerCode == lecturerCode && !x.IsDeleted,
+                item,
+                cancellationToken: ct);
+            if (result.MatchedCount == 0)
+                throw new ConflictException("Tài liệu đã thay đổi hoặc bị xóa. Vui lòng tải lại");
+        }
         return MapMaterial(item);
     }
 
@@ -203,8 +225,16 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
     public async Task<AssignmentDto> SaveAssignmentAsync(string lecturerCode, string? id, AssignmentUpsertRequest request, CancellationToken ct)
     {
         var section = await RequireSectionAsync(lecturerCode, request.ClassSectionId, ct);
+        if (string.IsNullOrWhiteSpace(request.Title))
+            throw new AppException("Tiêu đề bài tập là bắt buộc");
         if (request.DueAt <= request.OpenAt) throw new AppException("Hạn nộp phải sau ngày mở");
-        if (request.MaxScore <= 0) throw new AppException("Điểm tối đa phải lớn hơn 0");
+        if (!double.IsFinite(request.MaxScore) || request.MaxScore <= 0)
+            throw new AppException("Điểm tối đa phải lớn hơn 0");
+        if (!double.IsFinite(request.LatePenaltyPercent)
+            || request.LatePenaltyPercent is < 0 or > 100)
+            throw new AppException("Tỷ lệ trừ điểm nộp trễ phải từ 0 đến 100");
+        if (request.Status is not ("Draft" or "Open" or "Closed"))
+            throw new AppException("Trạng thái bài tập không hợp lệ");
         Assignment item;
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -214,27 +244,62 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
         {
             item = await db.Assignments.Find(x => x.Id == id && x.LecturerCode == lecturerCode && !x.IsDeleted).FirstOrDefaultAsync(ct)
                    ?? throw new NotFoundException("Không tìm thấy bài tập");
+            if (item.ClassSectionId != section.Id)
+            {
+                var hasSubmissions = await db.Submissions.CountDocumentsAsync(
+                    x => x.AssignmentId == item.Id && !x.IsDeleted,
+                    cancellationToken: ct) > 0;
+                if (hasSubmissions)
+                    throw new ConflictException(
+                        "Không thể chuyển bài tập sang lớp khác vì đã có bài nộp");
+            }
         }
+        item.ClassSectionId = section.Id;
+        item.ClassSectionCode = section.ClassSectionCode;
+        item.CourseCode = section.CourseCode;
+        item.CourseName = section.CourseName;
+        item.LecturerCode = lecturerCode;
         item.Title = request.Title.Trim();
-        item.Content = request.Content;
-        item.AttachmentUrl = request.AttachmentUrl;
+        item.Content = request.Content?.Trim() ?? string.Empty;
+        item.AttachmentUrl = request.AttachmentUrl?.Trim() ?? string.Empty;
         item.MaxScore = request.MaxScore;
         item.OpenAt = request.OpenAt;
         item.DueAt = request.DueAt;
         item.AllowLate = request.AllowLate;
-        item.LatePenaltyPercent = Math.Clamp(request.LatePenaltyPercent, 0, 100);
-        item.CloCodes = request.CloCodes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        item.LinkedComponentId = request.LinkedComponentId;
+        item.LatePenaltyPercent = request.LatePenaltyPercent;
+        item.CloCodes = (request.CloCodes ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        item.LinkedComponentId = string.IsNullOrWhiteSpace(request.LinkedComponentId)
+            ? null
+            : request.LinkedComponentId.Trim();
         item.Status = request.Status;
         item.UpdatedAt = DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(id)) await db.Assignments.InsertOneAsync(item, cancellationToken: ct);
-        else await db.Assignments.ReplaceOneAsync(x => x.Id == item.Id, item, cancellationToken: ct);
+        else
+        {
+            var result = await db.Assignments.ReplaceOneAsync(
+                x => x.Id == item.Id && x.LecturerCode == lecturerCode && !x.IsDeleted,
+                item,
+                cancellationToken: ct);
+            if (result.MatchedCount == 0)
+                throw new ConflictException("Bài tập đã thay đổi hoặc bị xóa. Vui lòng tải lại");
+        }
         var count = await db.Submissions.CountDocumentsAsync(x => x.AssignmentId == item.Id && !x.IsDeleted, cancellationToken: ct);
         return MapAssignment(item, (int)count, null);
     }
 
     public async Task DeleteAssignmentAsync(string lecturerCode, string id, CancellationToken ct)
     {
+        _ = await RequireAssignmentAsync(lecturerCode, id, ct);
+        var submissionCount = await db.Submissions.CountDocumentsAsync(
+            x => x.AssignmentId == id && !x.IsDeleted,
+            cancellationToken: ct);
+        if (submissionCount > 0)
+            throw new ConflictException(
+                "Không thể xóa bài tập đã có bài nộp. Hãy chuyển trạng thái sang Đã đóng");
         var result = await db.Assignments.UpdateOneAsync(
             x => x.Id == id && x.LecturerCode == lecturerCode && !x.IsDeleted,
             Builders<Assignment>.Update.Set(x => x.IsDeleted, true).Set(x => x.UpdatedAt, DateTime.UtcNow),
@@ -256,9 +321,14 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
         var submission = await db.Submissions.Find(x => x.Id == submissionId && !x.IsDeleted).FirstOrDefaultAsync(ct)
                          ?? throw new NotFoundException("Không tìm thấy bài nộp");
         var assignment = await RequireAssignmentAsync(lecturerCode, submission.AssignmentId, ct);
-        if (request.Score < 0 || request.Score > assignment.MaxScore) throw new AppException($"Điểm phải từ 0 đến {assignment.MaxScore}");
+        if (!double.IsFinite(request.Score)
+            || request.Score < 0
+            || request.Score > assignment.MaxScore)
+            throw new AppException($"Điểm phải từ 0 đến {assignment.MaxScore}");
+        if (request.Status is not ("Graded" or "NeedsRevision" or "Accepted"))
+            throw new AppException("Trạng thái chấm bài không hợp lệ");
         submission.Score = request.Score;
-        submission.Feedback = request.Feedback;
+        submission.Feedback = request.Feedback?.Trim() ?? string.Empty;
         submission.ResubmissionAllowed = request.ResubmissionAllowed;
         submission.Status = request.Status;
         submission.GradedAt = DateTime.UtcNow;
@@ -419,7 +489,7 @@ public sealed class LecturerPortalService(MongoContext db, IGradebookService gra
 
     private static LecturerClassDto MapClass(ClassSection x) => new(x.Id, x.ClassSectionCode, x.CourseCode, x.CourseName, x.AcademicYearName, x.SemesterName, x.Students.Count, x.GradeStatus, x.Schedule, x.StartDate, x.EndDate);
     private static MaterialDto MapMaterial(LearningMaterial x) => new(x.Id, x.ClassSectionId, x.ClassSectionCode, x.CourseCode, x.CourseName, x.Title, x.Description, x.Category, x.Chapter, x.ResourceType, x.ResourceUrl, x.VisibleFrom, x.VisibleUntil, x.ViewCount, x.DownloadCount, x.Status);
-    private static AssignmentDto MapAssignment(Assignment x, int count, Submission? submission) => new(x.Id, x.ClassSectionId, x.ClassSectionCode, x.CourseCode, x.CourseName, x.Title, x.Content, x.AttachmentUrl, x.MaxScore, x.OpenAt, x.DueAt, x.AllowLate, x.LatePenaltyPercent, x.CloCodes, x.LinkedComponentId, x.Status, count, submission?.Status, submission?.Score, submission?.Feedback);
+    private static AssignmentDto MapAssignment(Assignment x, int count, Submission? submission) => new(x.Id, x.ClassSectionId, x.ClassSectionCode, x.CourseCode, x.CourseName, x.Title, x.Content, x.AttachmentUrl, x.MaxScore, x.OpenAt, x.DueAt, x.AllowLate, x.LatePenaltyPercent, x.CloCodes, x.LinkedComponentId, x.Status, count, submission?.Status, submission?.Score, submission?.Feedback, submission?.ResubmissionAllowed ?? false);
     private static SubmissionDto MapSubmission(Submission x) => new(x.Id, x.AssignmentId, x.StudentId, x.StudentCode, x.StudentName, x.TextContent, x.Files, x.SubmittedAt, x.IsLate, x.Status, x.Score, x.Feedback, x.ResubmissionAllowed);
     private static GradebookStudentDto MapScoreRow(BsonValue value)
     {

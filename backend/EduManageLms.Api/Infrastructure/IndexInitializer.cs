@@ -5,26 +5,31 @@ namespace EduManageLms.Api.Infrastructure;
 
 public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> log)
 {
-    private sealed record IndexSpec(string Name, BsonDocument Keys, bool Unique = false, TimeSpan? ExpireAfter = null);
+    private sealed record IndexSpec(
+        string Name,
+        BsonDocument Keys,
+        bool Unique = false,
+        TimeSpan? ExpireAfter = null,
+        BsonDocument? PartialFilter = null);
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         await EnsureIndexesAsync("users",
         [
-            new("ux_users_username", Key(("username", 1)), true),
-            new("ux_users_email", Key(("email", 1)), true),
+            UniqueActive("ux_users_username", Key(("username", 1))),
+            UniqueActive("ux_users_email", Key(("email", 1))),
             new("ix_users_role_status", Key(("role", 1), ("status", 1)))
         ], ct);
         await EnsureIndexesAsync("students",
         [
-            new("ux_students_studentCode", Key(("studentCode", 1)), true),
+            UniqueActive("ux_students_studentCode", Key(("studentCode", 1))),
             new("ix_students_year_semester", Key(("academicRecords.academicYearId", 1), ("academicRecords.semesters.semesterId", 1)))
         ], ct);
-        await EnsureIndexesAsync("lecturers", [new("ux_lecturers_lecturerCode", Key(("lecturerCode", 1)), true)], ct);
-        await EnsureIndexesAsync("courses", [new("ux_courses_courseCode", Key(("courseCode", 1)), true)], ct);
+        await EnsureIndexesAsync("lecturers", [UniqueActive("ux_lecturers_lecturerCode", Key(("lecturerCode", 1)))], ct);
+        await EnsureIndexesAsync("courses", [UniqueActive("ux_courses_courseCode", Key(("courseCode", 1)))], ct);
         await EnsureIndexesAsync("classSections",
         [
-            new("ux_sections_code", Key(("classSectionCode", 1)), true),
+            UniqueActive("ux_sections_code", Key(("classSectionCode", 1))),
             new("ix_sections_year_semester_lecturer", Key(("academicYearId", 1), ("semesterId", 1), ("lecturerId", 1))),
             new("ix_sections_studentCode", Key(("students.studentCode", 1)))
         ], ct);
@@ -34,16 +39,16 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
             new("ix_notifications_createdAt", Key(("createdAt", -1)))
         ], ct);
         await EnsureIndexesAsync("auditLogs", [new("ix_audit_createdAt", Key(("createdAt", -1)))], ct);
-        await EnsureIndexesAsync("faculties", [new("ux_faculties_facultyCode", Key(("facultyCode", 1)), true)], ct);
-        await EnsureIndexesAsync("programs", [new("ux_programs_programCode", Key(("programCode", 1)), true)], ct);
+        await EnsureIndexesAsync("faculties", [UniqueActive("ux_faculties_facultyCode", Key(("facultyCode", 1)))], ct);
+        await EnsureIndexesAsync("programs", [UniqueActive("ux_programs_programCode", Key(("programCode", 1)))], ct);
         await EnsureIndexesAsync("academicYears",
         [
-            new("ux_academicYears_code", Key(("academicYearCode", 1)), true),
+            UniqueActive("ux_academicYears_code", Key(("academicYearCode", 1))),
             new("ix_academicYears_current", Key(("isCurrent", 1)))
         ], ct);
         await EnsureIndexesAsync("semesters",
         [
-            new("ux_semesters_year_code", Key(("academicYearId", 1), ("semesterCode", 1)), true),
+            UniqueActive("ux_semesters_year_code", Key(("academicYearId", 1), ("semesterCode", 1))),
             new("ix_semesters_gradeWindow", Key(("gradeEntryStart", 1), ("gradeEntryEnd", 1)))
         ], ct);
         await EnsureIndexesAsync("materials",
@@ -58,11 +63,11 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
         ], ct);
         await EnsureIndexesAsync("submissions",
         [
-            new("ux_submissions_assignment_student", Key(("assignmentId", 1), ("studentId", 1)), true),
+            UniqueActive("ux_submissions_assignment_student", Key(("assignmentId", 1), ("studentId", 1))),
             new("ix_submissions_section_status", Key(("classSectionId", 1), ("status", 1)))
         ], ct);
         await EnsureIndexesAsync("examSchedules", [new("ix_examSchedules_section_startAt", Key(("classSectionId", 1), ("startAt", 1)))], ct);
-        await EnsureIndexesAsync("systemSettings", [new("ux_systemSettings_key", Key(("key", 1)), true)], ct);
+        await EnsureIndexesAsync("systemSettings", [UniqueActive("ux_systemSettings_key", Key(("key", 1)))], ct);
         await EnsureIndexesAsync("gradeReopenRequests", [new("ix_gradeReopen_status_createdAt", Key(("status", 1), ("createdAt", -1)))], ct);
         await EnsureIndexesAsync("passwordResetTokens",
         [
@@ -79,7 +84,9 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
         {
             var existing = await ReadIndexesAsync(collection, ct);
             var sameName = existing.FirstOrDefault(x => x.GetValue("name", "").AsString == spec.Name);
-            if (sameName is not null && !KeysEqual(sameName, spec.Keys))
+            if (sameName is not null && IndexMatches(sameName, spec))
+                continue;
+            if (sameName is not null)
             {
                 await collection.Indexes.DropOneAsync(spec.Name, ct);
                 log.LogWarning("Dropped conflicting index {IndexName} on {Collection}", spec.Name, collectionName);
@@ -90,7 +97,6 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
             if (sameKeys is not null)
             {
                 var existingName = sameKeys.GetValue("name", "").AsString;
-                if (existingName == spec.Name) continue;
                 if (existingName != "_id_")
                 {
                     await collection.Indexes.DropOneAsync(existingName, ct);
@@ -98,7 +104,16 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
                 }
             }
 
-            var options = new CreateIndexOptions { Name = spec.Name, Unique = spec.Unique, ExpireAfter = spec.ExpireAfter };
+            var options = new CreateIndexOptions<BsonDocument>
+            {
+                Name = spec.Name,
+                Unique = spec.Unique,
+                ExpireAfter = spec.ExpireAfter,
+                PartialFilterExpression = spec.PartialFilter is null
+                    ? null
+                    : new BsonDocumentFilterDefinition<BsonDocument>(
+                        spec.PartialFilter)
+            };
             var model = new CreateIndexModel<BsonDocument>(new BsonDocumentIndexKeysDefinition<BsonDocument>(spec.Keys), options);
             await collection.Indexes.CreateOneAsync(model, cancellationToken: ct);
         }
@@ -112,6 +127,30 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
 
     private static bool KeysEqual(BsonDocument index, BsonDocument desired) =>
         index.TryGetValue("key", out var value) && value.IsBsonDocument && value.AsBsonDocument.Equals(desired);
+
+    private static bool IndexMatches(BsonDocument index, IndexSpec spec)
+    {
+        if (!KeysEqual(index, spec.Keys))
+            return false;
+        var uniqueValue = index.GetValue("unique", false);
+        var unique = uniqueValue.IsBoolean && uniqueValue.AsBoolean;
+        if (unique != spec.Unique)
+            return false;
+        var currentPartial = index.GetValue(
+            "partialFilterExpression",
+            BsonNull.Value);
+        if (spec.PartialFilter is null)
+            return currentPartial.IsBsonNull;
+        return currentPartial.IsBsonDocument
+            && currentPartial.AsBsonDocument.Equals(spec.PartialFilter);
+    }
+
+    private static IndexSpec UniqueActive(string name, BsonDocument keys) =>
+        new(
+            name,
+            keys,
+            Unique: true,
+            PartialFilter: new BsonDocument("isDeleted", false));
 
     private static BsonDocument Key(params (string Field, int Direction)[] fields)
     {
