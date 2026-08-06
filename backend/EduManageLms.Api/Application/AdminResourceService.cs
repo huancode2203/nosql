@@ -103,7 +103,8 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 await EnsureSingleCurrentAcademicYearAsync(
                     session,
                     resource,
-                    body,
+                    body.TryGetValue("isCurrent", out var rawCurrent)
+                    && ToBoolean(rawCurrent),
                     currentId: null,
                     token);
                 await Collection(resource).InsertOneAsync(
@@ -192,7 +193,8 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 await EnsureSingleCurrentAcademicYearAsync(
                     session,
                     resource,
-                    body,
+                    body.TryGetValue("isCurrent", out var rawCurrent)
+                    && ToBoolean(rawCurrent),
                     id,
                     token);
                 var update = new BsonDocument(
@@ -304,6 +306,16 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         var result = await InTransactionAsync(
             async (session, token) =>
             {
+                var restoringCurrentYear =
+                    existing.GetValue("isCurrent", false) is
+                    { IsBoolean: true } currentValue
+                    && currentValue.AsBoolean;
+                await EnsureSingleCurrentAcademicYearAsync(
+                    session,
+                    resource,
+                    restoringCurrentYear,
+                    id,
+                    token);
                 var updateResult = await Collection(resource).UpdateOneAsync(
                     session,
                     Builders<BsonDocument>.Filter.Eq("_id", oid)
@@ -700,6 +712,14 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
 
         var role = document.GetValue("role", "").AsString;
+        var previousRole = previousDocument?.GetValue("role", "").AsString;
+        var roleChanged = previousRole is not null
+            && !previousRole.Equals(role, StringComparison.OrdinalIgnoreCase);
+        await DeactivatePreviousRoleProfileAsync(
+            session,
+            previousDocument,
+            role,
+            ct);
         if (role.Equals("Student", StringComparison.OrdinalIgnoreCase))
         {
             await EnsureProfileAsync(
@@ -709,6 +729,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 document.GetValue("studentCode", "").AsString,
                 document,
                 "Studying",
+                roleChanged,
                 ct);
         }
         else if (role.Equals("Lecturer", StringComparison.OrdinalIgnoreCase))
@@ -720,8 +741,58 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 document.GetValue("lecturerCode", "").AsString,
                 document,
                 "Active",
+                roleChanged,
                 ct);
         }
+    }
+
+    private async Task DeactivatePreviousRoleProfileAsync(
+        IClientSessionHandle session,
+        BsonDocument? previousUser,
+        string currentRole,
+        CancellationToken ct)
+    {
+        if (previousUser is null)
+            return;
+
+        var previousRole = previousUser.GetValue("role", "").AsString;
+        if (previousRole.Equals(currentRole, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var (collectionName, codeField, inactiveStatus) =
+            previousRole.ToLowerInvariant() switch
+            {
+                "student" => ("students", "studentCode", "Suspended"),
+                "lecturer" => ("lecturers", "lecturerCode", "Inactive"),
+                _ => (string.Empty, string.Empty, string.Empty)
+            };
+        if (collectionName.Length == 0)
+            return;
+
+        var code = previousUser.GetValue(codeField, "").AsString;
+        if (string.IsNullOrWhiteSpace(code))
+            return;
+
+        var collection = db.Database.GetCollection<BsonDocument>(collectionName);
+        var profile = await collection.Find(
+                session,
+                Builders<BsonDocument>.Filter.Eq(codeField, code)
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
+            .FirstOrDefaultAsync(ct);
+        if (profile is null)
+            return;
+
+        var previousStatus = profile.GetValue("status", inactiveStatus).AsString;
+        await collection.UpdateOneAsync(
+            session,
+            Builders<BsonDocument>.Filter.Eq("_id", profile["_id"]),
+            Builders<BsonDocument>.Update
+                .Set("status", inactiveStatus)
+                .Set("accountLinked", false)
+                .Set("accountUnlinkedAt", DateTime.UtcNow)
+                .Set("accountUnlinkedPreviousStatus", previousStatus)
+                .Set("updatedAt", DateTime.UtcNow),
+            cancellationToken: ct);
     }
 
     private async Task EnsureLinkedUserAsync(
@@ -821,6 +892,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         string code,
         BsonDocument user,
         string defaultStatus,
+        bool reactivate,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(code))
@@ -846,6 +918,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 ["fullName"] = user.GetValue("fullName", ""),
                 ["email"] = user.GetValue("email", ""),
                 ["status"] = defaultStatus,
+                ["accountLinked"] = true,
                 ["createdAt"] = DateTime.UtcNow,
                 ["updatedAt"] = DateTime.UtcNow,
                 ["isDeleted"] = false
@@ -865,13 +938,28 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
         }
 
+        var update = Builders<BsonDocument>.Update
+            .Set("fullName", user.GetValue("fullName", ""))
+            .Set("email", user.GetValue("email", ""))
+            .Set("accountLinked", true)
+            .Set("updatedAt", DateTime.UtcNow);
+        if (reactivate
+            && existing.Contains("accountUnlinkedPreviousStatus"))
+        {
+            update = update
+                .Set(
+                    "status",
+                    existing.GetValue(
+                        "accountUnlinkedPreviousStatus",
+                        defaultStatus))
+                .Unset("accountUnlinkedAt")
+                .Unset("accountUnlinkedPreviousStatus");
+        }
+
         await collection.UpdateOneAsync(
             session,
             Builders<BsonDocument>.Filter.Eq("_id", existing["_id"]),
-            Builders<BsonDocument>.Update
-                .Set("fullName", user.GetValue("fullName", ""))
-                .Set("email", user.GetValue("email", ""))
-                .Set("updatedAt", DateTime.UtcNow),
+            update,
             cancellationToken: ct);
     }
 
@@ -1383,11 +1471,27 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     {
         if (!resource.Equals("users", StringComparison.OrdinalIgnoreCase))
             return;
-        var role = GetString(body, "role")
-            ?? existing?.GetValue("role", "").AsString;
+        var existingRole = existing?.GetValue("role", "").AsString;
+        var role = GetString(body, "role") ?? existingRole;
+        if (AdminUserPolicy.RequiresExplicitAdminPermissions(
+                existingRole,
+                role,
+                body.ContainsKey("permissions")))
+            throw new AppException(
+                existing is null
+                    ? "Tài khoản Admin mới phải được cấu hình quyền cụ thể"
+                    : "Khi chuyển sang vai trò Admin phải cấu hình quyền cụ thể");
         if (role is not null
             && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
             body["permissions"] = Array.Empty<string>();
+
+        foreach (var field in AdminUserPolicy.ObsoleteLinkFields(role))
+        {
+            if (existing is null)
+                body.Remove(field);
+            else
+                body[field] = null;
+        }
     }
 
     private static void ValidateNumberRange(
@@ -1549,12 +1653,12 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     private async Task EnsureSingleCurrentAcademicYearAsync(
         IClientSessionHandle session,
         string resource,
-        Dictionary<string, object?> body,
+        bool isCurrent,
         string? currentId,
         CancellationToken ct)
     {
         if (!resource.Equals("academic-years", StringComparison.OrdinalIgnoreCase)) return;
-        if (!body.TryGetValue("isCurrent", out var raw) || !ToBoolean(raw)) return;
+        if (!isCurrent) return;
 
         var filter = Builders<BsonDocument>.Filter.Eq("isCurrent", true);
         if (!string.IsNullOrWhiteSpace(currentId))
@@ -1629,7 +1733,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
 
     private static string[] UniqueFields(string resource) => resource switch
     {
-        "users" => ["username", "email"],
+        "users" => ["username", "email", "studentCode", "lecturerCode"],
         "students" => ["studentCode", "email"],
         "lecturers" => ["lecturerCode", "email"],
         "faculties" => ["facultyCode"],

@@ -14,10 +14,21 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
+        await ReconcileDuplicateUserLinksAsync(ct);
+        await ReconcileCurrentAcademicYearsAsync(ct);
+
         await EnsureIndexesAsync("users",
         [
             UniqueActive("ux_users_username", Key(("username", 1))),
             UniqueActive("ux_users_email", Key(("email", 1))),
+            UniqueActiveString(
+                "ux_users_studentCode",
+                Key(("studentCode", 1)),
+                "studentCode"),
+            UniqueActiveString(
+                "ux_users_lecturerCode",
+                Key(("lecturerCode", 1)),
+                "lecturerCode"),
             new("ix_users_role_status", Key(("role", 1), ("status", 1)))
         ], ct);
         await EnsureIndexesAsync("students",
@@ -44,7 +55,15 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
         await EnsureIndexesAsync("academicYears",
         [
             UniqueActive("ux_academicYears_code", Key(("academicYearCode", 1))),
-            new("ix_academicYears_current", Key(("isCurrent", 1)))
+            new(
+                "ux_academicYears_single_current",
+                Key(("isCurrent", 1)),
+                Unique: true,
+                PartialFilter: new BsonDocument
+                {
+                    ["isDeleted"] = false,
+                    ["isCurrent"] = true
+                })
         ], ct);
         await EnsureIndexesAsync("semesters",
         [
@@ -75,6 +94,98 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
             new("ttl_passwordReset_expiresAt", Key(("expiresAt", 1)), ExpireAfter: TimeSpan.Zero)
         ], ct);
         log.LogInformation("MongoDB indexes initialized");
+    }
+
+    private async Task ReconcileDuplicateUserLinksAsync(
+        CancellationToken ct)
+    {
+        var users = db.Database.GetCollection<BsonDocument>("users");
+        foreach (var field in new[] { "studentCode", "lecturerCode" })
+        {
+            var filter = new BsonDocument
+            {
+                { "isDeleted", false },
+                {
+                    field,
+                    new BsonDocument
+                    {
+                        { "$type", "string" },
+                        { "$gt", "" }
+                    }
+                }
+            };
+            var documents = await users.Find(filter)
+                .Sort(Builders<BsonDocument>.Sort.Combine(
+                    Builders<BsonDocument>.Sort.Ascending("createdAt"),
+                    Builders<BsonDocument>.Sort.Ascending("_id")))
+                .Project(
+                    Builders<BsonDocument>.Projection
+                        .Include("_id")
+                        .Include(field))
+                .ToListAsync(ct);
+
+            var duplicates = documents
+                .Where(document => document.GetValue(field, BsonNull.Value).IsString)
+                .GroupBy(
+                    document => document[field].AsString,
+                    StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1);
+            foreach (var duplicate in duplicates)
+            {
+                var duplicateIds = duplicate
+                    .Skip(1)
+                    .Select(document => document["_id"])
+                    .ToArray();
+                if (duplicateIds.Length == 0)
+                    continue;
+
+                await users.UpdateManyAsync(
+                    Builders<BsonDocument>.Filter.In("_id", duplicateIds),
+                    Builders<BsonDocument>.Update
+                        .Unset(field)
+                        .Set("status", "Inactive")
+                        .Set("linkConflictResolvedAt", DateTime.UtcNow)
+                        .Set("linkConflictField", field)
+                        .Set("updatedAt", DateTime.UtcNow),
+                    cancellationToken: ct);
+                log.LogWarning(
+                    "Resolved {Count} duplicate active user links for {Field}",
+                    duplicateIds.Length,
+                    field);
+            }
+        }
+    }
+
+    private async Task ReconcileCurrentAcademicYearsAsync(
+        CancellationToken ct)
+    {
+        var academicYears = db.Database
+            .GetCollection<BsonDocument>("academicYears");
+        var current = await academicYears.Find(
+                Builders<BsonDocument>.Filter.Eq("isCurrent", true)
+                & Builders<BsonDocument>.Filter.Ne("isDeleted", true))
+            .Sort(Builders<BsonDocument>.Sort.Combine(
+                Builders<BsonDocument>.Sort.Descending("updatedAt"),
+                Builders<BsonDocument>.Sort.Descending("createdAt"),
+                Builders<BsonDocument>.Sort.Descending("_id")))
+            .Project(Builders<BsonDocument>.Projection.Include("_id"))
+            .ToListAsync(ct);
+        if (current.Count <= 1)
+            return;
+
+        var duplicateIds = current
+            .Skip(1)
+            .Select(document => document["_id"])
+            .ToArray();
+        await academicYears.UpdateManyAsync(
+            Builders<BsonDocument>.Filter.In("_id", duplicateIds),
+            Builders<BsonDocument>.Update
+                .Set("isCurrent", false)
+                .Set("updatedAt", DateTime.UtcNow),
+            cancellationToken: ct);
+        log.LogWarning(
+            "Resolved {Count} duplicate current academic years",
+            duplicateIds.Length);
     }
 
     private async Task EnsureIndexesAsync(string collectionName, IReadOnlyCollection<IndexSpec> specs, CancellationToken ct)
@@ -151,6 +262,27 @@ public sealed class IndexInitializer(MongoContext db, ILogger<IndexInitializer> 
             keys,
             Unique: true,
             PartialFilter: new BsonDocument("isDeleted", false));
+
+    private static IndexSpec UniqueActiveString(
+        string name,
+        BsonDocument keys,
+        string field) =>
+        new(
+            name,
+            keys,
+            Unique: true,
+            PartialFilter: new BsonDocument
+            {
+                { "isDeleted", false },
+                {
+                    field,
+                    new BsonDocument
+                    {
+                        { "$type", "string" },
+                        { "$gt", "" }
+                    }
+                }
+            });
 
     private static BsonDocument Key(params (string Field, int Direction)[] fields)
     {

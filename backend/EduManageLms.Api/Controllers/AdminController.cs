@@ -54,7 +54,11 @@ public sealed class AdminController(
         CancellationToken ct)
     {
         EnsureResourcePermission(resource, write: true);
-        EnsureCanChangeUserPermissions(resource, body);
+        await EnsureCanChangeUserSecurityAsync(
+            resource,
+            id: null,
+            body,
+            ct);
         PrepareNotificationBody(resource, body, creating: true);
         var result = await resources.CreateAsync(resource, body, Actor(), ct);
 
@@ -72,7 +76,7 @@ public sealed class AdminController(
         CancellationToken ct)
     {
         EnsureResourcePermission(resource, write: true);
-        EnsureCanChangeUserPermissions(resource, body);
+        await EnsureCanChangeUserSecurityAsync(resource, id, body, ct);
         PrepareNotificationBody(resource, body, creating: false);
         var result = await resources.UpdateAsync(resource, id, body, Actor(), ct);
 
@@ -221,20 +225,50 @@ public sealed class AdminController(
             throw new ForbiddenException();
     }
 
-    private void EnsureCanChangeUserPermissions(
+    private async Task EnsureCanChangeUserSecurityAsync(
         string resource,
-        IReadOnlyDictionary<string, object?> body)
+        string? id,
+        IReadOnlyDictionary<string, object?> body,
+        CancellationToken ct)
     {
-        if (resource.Equals("users", StringComparison.OrdinalIgnoreCase)
-            && body.Keys.Any(
-                key => key.Equals(
-                    "permissions",
-                    StringComparison.OrdinalIgnoreCase))
-            && !User.HasPermission(AppPermissions.UsersManagePermissions))
+        if (!resource.Equals("users", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var permissionsProvided = body.Keys.Any(
+            key => key.Equals(
+                "permissions",
+                StringComparison.OrdinalIgnoreCase));
+        var requestedRole = BodyString(body, "role");
+        string? existingRole = null;
+        if (id is not null && requestedRole is not null)
         {
-            throw new ForbiddenException(
-                "Bạn không có quyền thay đổi quyền của tài khoản");
+            var existing = await resources.GetAsync(resource, id, ct);
+            existingRole = BodyString(existing, "role");
         }
+
+        if (AdminUserPolicy.RequiresPermissionManagement(
+                existingRole,
+                requestedRole,
+                permissionsProvided,
+                creating: id is null)
+            && !User.HasPermission(AppPermissions.UsersManagePermissions))
+            throw new ForbiddenException(
+                "Bạn không có quyền thay đổi vai trò hoặc quyền của tài khoản");
+    }
+
+    private static string? BodyString(
+        IReadOnlyDictionary<string, object?> body,
+        string key)
+    {
+        if (!body.TryGetValue(key, out var value) || value is null)
+            return null;
+        if (value is System.Text.Json.JsonElement json)
+            return json.ValueKind == System.Text.Json.JsonValueKind.String
+                ? json.GetString()
+                : json.ToString();
+        return Convert.ToString(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private void PrepareNotificationBody(
