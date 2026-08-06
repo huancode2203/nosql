@@ -1,6 +1,7 @@
 using EduManageLms.Api.Common;
 using EduManageLms.Api.Domain;
 using EduManageLms.Api.Infrastructure;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace EduManageLms.Api.Application;
@@ -15,6 +16,7 @@ public sealed class AdminAvatarService(
         AdminActor actor,
         CancellationToken ct)
     {
+        userId = ValidateUserId(userId);
         if (file.Length <= 0)
             throw new AppException("Tệp ảnh đại diện đang rỗng.");
         if (file.Length > AvatarFileValidator.MaximumBytes)
@@ -96,6 +98,7 @@ public sealed class AdminAvatarService(
         AdminActor actor,
         CancellationToken ct)
     {
+        userId = ValidateUserId(userId);
         var user = await db.Users
             .Find(x => x.Id == userId && !x.IsDeleted)
             .FirstOrDefaultAsync(ct)
@@ -143,6 +146,14 @@ public sealed class AdminAvatarService(
             user.AvatarUrl,
             Path.Combine(environment.ContentRootPath, "uploads", "avatars"));
         return new AdminAvatarDto(user.Id, null);
+    }
+
+    internal static string ValidateUserId(string userId)
+    {
+        var normalized = userId?.Trim() ?? string.Empty;
+        if (!ObjectId.TryParse(normalized, out _))
+            throw new AppException("ID tài khoản không hợp lệ.");
+        return normalized;
     }
 
     private static void DeleteManagedAvatar(

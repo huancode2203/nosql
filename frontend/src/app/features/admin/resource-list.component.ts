@@ -105,6 +105,13 @@ export class ResourceListComponent implements OnInit {
     if (this.saving()) {
       return;
     }
+    if (item && !this.recordId(item['id'])) {
+      this.toast.show(
+        'ID bản ghi không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+        'error'
+      );
+      return;
+    }
     const value = item
       ? this.normalizeForForm(item)
       : this.defaultValue();
@@ -117,7 +124,15 @@ export class ResourceListComponent implements OnInit {
       return;
     }
     const entity = this.editing();
-    const id = entity['id'];
+    const rawId = entity['id'];
+    const id = rawId ? this.recordId(rawId) : null;
+    if (rawId && !id) {
+      this.toast.show(
+        'ID bản ghi không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+        'error'
+      );
+      return;
+    }
     const body: Record<string, unknown> = {};
     for (const field of this.fields()) {
       if (field.createOnly && id) {
@@ -189,11 +204,19 @@ export class ResourceListComponent implements OnInit {
     if (this.workingId()) {
       return;
     }
+    const id = this.recordId(item['id']);
+    if (!id) {
+      this.toast.show(
+        'ID bản ghi không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+        'error'
+      );
+      return;
+    }
     if (!confirm('Xác nhận xóa mềm bản ghi này?')) {
       return;
     }
-    this.workingId.set(item['id']);
-    this.api.delete(`/admin/${this.resource()}/${item['id']}`).subscribe({
+    this.workingId.set(id);
+    this.api.delete(`/admin/${this.resource()}/${id}`).subscribe({
       next: () => {
         this.workingId.set('');
         this.toast.show('Đã chuyển bản ghi vào thùng rác', 'success');
@@ -213,12 +236,20 @@ export class ResourceListComponent implements OnInit {
     if (this.workingId()) {
       return;
     }
+    const id = this.recordId(item['id']);
+    if (!id) {
+      this.toast.show(
+        'ID bản ghi không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+        'error'
+      );
+      return;
+    }
     if (!confirm('Khôi phục bản ghi này?')) {
       return;
     }
-    this.workingId.set(item['id']);
+    this.workingId.set(id);
     this.api.post(
-      `/admin/${this.resource()}/${item['id']}/restore`,
+      `/admin/${this.resource()}/${id}/restore`,
       {}
     ).subscribe({
       next: () => {
@@ -281,8 +312,14 @@ export class ResourceListComponent implements OnInit {
 
   chooseAvatar(fileList: FileList | null) {
     const file = fileList?.item(0);
-    const userId = this.editing()['id'];
+    const userId = this.recordId(this.editing()['id']);
     if (!file || !userId || !this.canManageUserAvatars()) {
+      if (file && !userId) {
+        this.toast.show(
+          'ID tài khoản không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+          'error'
+        );
+      }
       return;
     }
 
@@ -310,8 +347,14 @@ export class ResourceListComponent implements OnInit {
   }
 
   removeAvatar() {
-    const userId = this.editing()['id'];
+    const userId = this.recordId(this.editing()['id']);
     if (!userId || !this.canManageUserAvatars()) {
+      if (!userId) {
+        this.toast.show(
+          'ID tài khoản không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+          'error'
+        );
+      }
       return;
     }
     if (!confirm('Xóa ảnh đại diện của tài khoản này?')) {
@@ -514,6 +557,14 @@ export class ResourceListComponent implements OnInit {
     return value === undefined
       || value === null
       || (typeof value === 'string' && value.trim() === '');
+  }
+
+  private recordId(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const id = value.trim();
+    return /^[0-9a-f]{24}$/i.test(id) ? id : null;
   }
 
   private download(blob: Blob, name: string) {

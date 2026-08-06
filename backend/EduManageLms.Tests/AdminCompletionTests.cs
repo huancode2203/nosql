@@ -57,6 +57,44 @@ public sealed class AdminCompletionTests
     }
 
     [Fact]
+    public void AvatarUserIdValidator_RejectsSerializedObjectText()
+    {
+        var action = () => AdminAvatarService.ValidateUserId(
+            "[object Object]");
+
+        action.Should()
+            .Throw<AppException>()
+            .WithMessage("ID tài khoản không hợp lệ.");
+    }
+
+    [Fact]
+    public void AdminResourceMap_ConvertsObjectIdsToStringsRecursively()
+    {
+        var rootId = ObjectId.GenerateNewId();
+        var nestedId = ObjectId.GenerateNewId();
+        var document = new BsonDocument
+        {
+            ["_id"] = rootId,
+            ["profile"] = new BsonDocument
+            {
+                ["facultyId"] = nestedId
+            },
+            ["recipientIds"] = new BsonArray { nestedId }
+        };
+
+        var result = AdminResourceService.Map(document);
+
+        result["id"].Should().Be(rootId.ToString());
+        result["profile"].Should().BeEquivalentTo(
+            new Dictionary<string, object?>
+            {
+                ["facultyId"] = nestedId.ToString()
+            });
+        result["recipientIds"].Should().BeEquivalentTo(
+            new object?[] { nestedId.ToString() });
+    }
+
+    [Fact]
     public void LegacyCourseDocuments_IgnoreUnknownFields()
     {
         var document = new BsonDocument

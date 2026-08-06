@@ -1815,11 +1815,11 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     private static ObjectId ParseId(string id) =>
         ObjectId.TryParse(id, out var oid) ? oid : throw new AppException("Id không hợp lệ");
 
-    private static Dictionary<string, object?> Map(BsonDocument document)
+    internal static Dictionary<string, object?> Map(BsonDocument document)
     {
         var result = document.Elements.ToDictionary(
             element => element.Name == "_id" ? "id" : element.Name,
-            element => BsonTypeMapper.MapToDotNetValue(element.Value));
+            element => MapResponseValue(element.Value));
         foreach (var sensitive in new[]
                  {
                      "passwordHash", "refreshTokens", "failedLoginCount",
@@ -1840,6 +1840,24 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 result[field] = IdAsString(value);
         }
         return result;
+    }
+
+    private static object? MapResponseValue(BsonValue value)
+    {
+        if (value.IsBsonNull)
+            return null;
+        if (value.IsObjectId)
+            return value.AsObjectId.ToString();
+        if (value.IsBsonDocument)
+        {
+            return value.AsBsonDocument.Elements.ToDictionary(
+                element => element.Name,
+                element => MapResponseValue(element.Value));
+        }
+        if (value.IsBsonArray)
+            return value.AsBsonArray.Select(MapResponseValue).ToList();
+
+        return BsonTypeMapper.MapToDotNetValue(value);
     }
 
     private static void FlattenSnapshot(
