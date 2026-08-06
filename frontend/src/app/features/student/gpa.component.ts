@@ -20,7 +20,7 @@ interface GpaResult {
   <app-page-header title="Điểm trung bình và tiến độ" subtitle="GPA chỉ tính các học phần đã công bố và được tổng hợp bằng MongoDB Aggregation."></app-page-header>
   @if (data(); as g) {
     <section class="stats-grid">
-      <app-stat-card label="GPA tích lũy" [value]="g.gpa" icon="insights" [trend]="g.classification" />
+      <app-stat-card label="GPA tích lũy" [value]="g.gpa" icon="query_stats" [trend]="g.classification" />
       <app-stat-card label="Trung bình hệ 10" [value]="g.average10" icon="calculate" tone="success" />
       <app-stat-card label="Tín chỉ tính GPA" [value]="g.totalCredits" icon="menu_book" tone="warning" />
       <app-stat-card label="Tín chỉ đã đạt" [value]="g.passedCredits" icon="workspace_premium" tone="success" />

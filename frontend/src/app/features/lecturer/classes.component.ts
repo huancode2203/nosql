@@ -55,7 +55,7 @@ import { PageHeaderComponent } from '../../shared/page-header.component';
       </div>
     } @else if (classes().length === 0) {
       <div class="portal-empty">
-        <span class="material-symbols-outlined">class</span>
+        <span class="material-symbols-outlined">co_present</span>
         <h3>Chưa có lớp học phần được phân công</h3>
         <p>Dữ liệu lớp sẽ xuất hiện sau khi quản trị viên phân công giảng viên.</p>
       </div>

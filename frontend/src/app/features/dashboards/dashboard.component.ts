@@ -47,7 +47,7 @@ export class DashboardComponent implements OnInit {
         { label: 'Sinh viên', icon: 'school', route: '/admin/students', permission: 'admin.resources.read' },
         { label: 'Giảng viên', icon: 'badge', route: '/admin/lecturers', permission: 'admin.resources.read' },
         { label: 'Môn học', icon: 'menu_book', route: '/admin/courses', permission: 'admin.resources.read' },
-        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections', permission: 'admin.resources.read' },
+        { label: 'Lớp học phần', icon: 'co_present', route: '/admin/class-sections', permission: 'admin.resources.read' },
         { label: 'Cấu trúc điểm', icon: 'rule', route: '/admin/grading-schemes', permission: 'admin.settings.manage' },
         { label: 'Báo cáo', icon: 'analytics', route: '/admin/reports', permission: 'admin.reports.read' },
         { label: 'Sao lưu', icon: 'backup', route: '/admin/backups', permission: 'admin.backups.read' }
@@ -58,7 +58,7 @@ export class DashboardComponent implements OnInit {
     }
     if (this.isLecturer()) {
       return [
-        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes' },
+        { label: 'Lớp phụ trách', icon: 'co_present', route: '/lecturer/classes' },
         { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades' },
         { label: 'Thống kê lớp', icon: 'monitoring', route: '/lecturer/classes' },
         { label: 'Tài liệu', icon: 'folder_open', route: '/lecturer/classes' },

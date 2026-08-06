@@ -5,12 +5,21 @@
 
 :root {
   --edu-font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+  --surface-muted: #eef3f8;
+  --grade-cell-bg: var(--card);
+  --grade-failed-bg: #fff8f7;
   --edu-monospace-family:
     "Cascadia Code",
     "SFMono-Regular",
     Consolas,
     "Liberation Mono",
     monospace;
+}
+
+body.dark-theme {
+  --surface-muted: #203146;
+  --grade-cell-bg: var(--card);
+  --grade-failed-bg: #2e2023;
 }
 
 html,
@@ -67,6 +76,28 @@ samp {
     "opsz" 24;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.primary-button,
+.secondary-button,
+.text-button,
+.icon-button {
+  line-height: 1.2;
+}
+
+/* Keep the header search usable while the catalogue is open. */
+.portal-header.launcher-open {
+  z-index: 75;
+}
+
+.portal-overlay {
+  z-index: 60;
+}
+
+.floating-launcher-button {
+  z-index: 55;
 }
 
 .launcher-heading > div > span,
@@ -88,8 +119,22 @@ samp {
 }
 
 .launcher-panel {
+  z-index: 80;
   overflow-x: hidden;
   scrollbar-gutter: stable;
+  isolation: isolate;
+}
+
+.result-table td.final-score.final-score-column {
+  background: var(--grade-cell-bg) !important;
+}
+
+.result-table tr.failed-row td.final-score.final-score-column {
+  background: var(--grade-failed-bg) !important;
+}
+
+.audit-note {
+  background: var(--surface-muted);
 }
 
 .launcher-search-result {

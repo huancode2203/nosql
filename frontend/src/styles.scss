@@ -16,7 +16,7 @@
 @media print{.sidebar,.topbar,.page-header .button-group,.page-header button{display:none!important}.workspace{margin-left:0!important}.content{padding:0}.panel{break-inside:avoid;box-shadow:none}}
 
 /* ========================================================================== */
-/* Portal UI refresh â€“ horizontal education portal layout                     */
+/* Portal UI refresh – horizontal education portal layout                     */
 /* ========================================================================== */
 :root{
   --portal-blue:#0b6fc2;
@@ -341,7 +341,7 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
   white-space: nowrap;
 }
 .curriculum-table td:not(:nth-child(2)) { text-align: center; }
-.curriculum-table code { color: #19395e; font-family: inherit; font-weight: 650; }
+.curriculum-table code { color: #19395e; font-family: inherit; font-weight: 600; }
 .semester-row td {
   background: #dcecff;
   color: #154f8f;
@@ -1222,7 +1222,7 @@ body.dark-theme .body-launcher-button[aria-expanded='true'] {
 
 .floating-launcher-button {
   position: fixed;
-  z-index: 95;
+  z-index: 55;
   min-width: 48px;
   height: 48px;
   padding: 0 14px;
@@ -1256,7 +1256,7 @@ body.dark-theme .body-launcher-button[aria-expanded='true'] {
 
 .floating-launcher-label {
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1280,7 +1280,7 @@ body.dark-theme .body-launcher-button[aria-expanded='true'] {
   transition: none;
 }
 
-/* Keep the launcher above the overlay so the same button can close the panel. */
+/* The overlay covers the floating launcher while the catalogue is open. */
 .portal-overlay {
   z-index: 70;
 }
@@ -1336,7 +1336,7 @@ body.dark-theme .floating-launcher-button[aria-expanded='true'] {
   max-width: 112px !important;
   padding: 7px 10px !important;
   border-radius: 0 !important;
-  background: #ffffff !important;
+  background: var(--grade-cell-bg, var(--card)) !important;
   box-shadow: none !important;
   outline: 0 !important;
   vertical-align: middle !important;
@@ -1344,7 +1344,7 @@ body.dark-theme .floating-launcher-button[aria-expanded='true'] {
 }
 
 .result-table tr.failed-row td.final-score.final-score-column {
-  background: #fff8f7 !important;
+  background: var(--grade-failed-bg, #fff8f7) !important;
 }
 
 .result-table td.final-score.final-score-column::before,

@@ -69,7 +69,7 @@ export class AppLayoutComponent implements OnInit {
         { label: 'Năm học', icon: 'date_range', route: '/admin/academic-years', permission: 'admin.resources.read' },
         { label: 'Học kỳ', icon: 'calendar_view_month', route: '/admin/semesters', permission: 'admin.resources.read' },
         { label: 'Môn học', icon: 'menu_book', route: '/admin/courses', permission: 'admin.resources.read' },
-        { label: 'Lớp học phần', icon: 'class', route: '/admin/class-sections', permission: 'admin.resources.read' },
+        { label: 'Lớp học phần', icon: 'co_present', route: '/admin/class-sections', permission: 'admin.resources.read' },
         { label: 'Duyệt bảng điểm', icon: 'fact_check', route: '/admin/gradebooks', description: 'Kiểm tra và công bố điểm', permission: 'admin.grades.review' },
         { label: 'Cấu trúc điểm & CLO', icon: 'rule', route: '/admin/grading-schemes', permission: 'admin.settings.manage' },
         { label: 'Thông báo', icon: 'notifications', route: '/admin/notifications', permission: 'admin.notifications.manage' },
@@ -87,7 +87,7 @@ export class AppLayoutComponent implements OnInit {
     if (role === 'Lecturer') {
       return [
         { label: 'Tổng quan', icon: 'dashboard', route: '/lecturer/dashboard', description: 'Tổng quan giảng dạy' },
-        { label: 'Lớp phụ trách', icon: 'class', route: '/lecturer/classes', description: 'Sinh viên, thống kê và CLO' },
+        { label: 'Lớp phụ trách', icon: 'co_present', route: '/lecturer/classes', description: 'Sinh viên, thống kê và CLO' },
         { label: 'Nhập điểm', icon: 'edit_note', route: '/lecturer/grades', description: 'Nhập, import và gửi duyệt điểm' },
         { label: 'Tài liệu giảng dạy', icon: 'folder_open', route: '/lecturer/materials', description: 'Công bố tài liệu theo lớp' },
         { label: 'Bài tập & chấm bài', icon: 'assignment', route: '/lecturer/assignments', description: 'Giao bài và phản hồi' },
@@ -101,7 +101,7 @@ export class AppLayoutComponent implements OnInit {
       { label: 'Kết quả học tập', icon: 'grading', route: '/student/grades' },
       { label: 'Chương trình khung', icon: 'view_list', route: '/student/curriculum' },
       { label: 'Môn đang học', icon: 'auto_stories', route: '/student/current-courses' },
-      { label: 'GPA & tiến độ', icon: 'insights', route: '/student/gpa' },
+      { label: 'GPA & tiến độ', icon: 'query_stats', route: '/student/gpa' },
       { label: 'Kết quả CLO', icon: 'radar', route: '/student/clo-results' },
       { label: 'Lịch học & thi', icon: 'calendar_month', route: '/student/schedule' },
       { label: 'Tài liệu', icon: 'folder_open', route: '/student/materials' },
