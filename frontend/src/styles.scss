@@ -144,7 +144,7 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 .semester-score-chart {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
-  min-height: 330px;
+  min-height: 310px;
   padding: 10px 4px 0;
 }
 
@@ -161,14 +161,25 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 .score-plot {
   position: relative;
   min-width: 0;
-  height: 330px;
+  height: 310px;
   border-left: 1px solid #8fa1b8;
-  border-bottom: 1px solid #8fa1b8;
+  overflow: hidden;
+}
+
+.score-plot::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 62px;
+  left: 0;
+  border-top: 1px solid #8fa1b8;
+  pointer-events: none;
 }
 
 .score-grid-lines {
   position: absolute;
-  inset: 0 0 0 0;
+  inset: 0 0 62px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -183,22 +194,21 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 
 .score-bars {
   position: absolute;
-  inset: 0 10px -58px 10px;
-  display: flex;
-  align-items: flex-end;
-  gap: clamp(14px, 3vw, 34px);
-  overflow-x: auto;
-  overflow-y: visible;
-  padding: 0 10px;
+  z-index: 2;
+  inset: 0 8px;
+  display: grid;
+  grid-template-columns: repeat(var(--course-count, 1), minmax(0, 1fr));
+  align-items: stretch;
+  gap: clamp(5px, 1.25vw, 20px);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .score-bar-column {
-  flex: 1 0 88px;
-  max-width: 150px;
-  min-width: 88px;
-  height: calc(100% + 58px);
+  min-width: 0;
+  height: 100%;
   display: grid;
-  grid-template-rows: 22px 1fr 40px 18px;
+  grid-template-rows: 22px minmax(0, 1fr) 40px 22px;
   align-items: end;
   justify-items: center;
   text-align: center;
@@ -211,7 +221,7 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 }
 
 .score-bar-shell {
-  width: clamp(34px, 5vw, 68px);
+  width: min(58px, 72%);
   height: 100%;
   display: flex;
   align-items: flex-end;
@@ -237,6 +247,7 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .score-bar-column > small {
@@ -779,37 +790,46 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 
 .semester-score-chart {
   grid-template-columns: 34px minmax(0, 1fr);
-  min-height: 300px;
+  min-height: 310px;
   padding-top: 18px;
 }
 
 .score-y-axis {
-  padding: 0 8px 58px 0;
+  padding: 0 8px 62px 0;
 }
 
 .score-plot {
-  height: 300px;
-  overflow: visible;
+  height: 310px;
+  overflow: hidden;
 }
 
 .score-bars {
   inset: 0 8px 0 8px;
   align-items: stretch;
-  gap: clamp(16px, 2.2vw, 30px);
+  gap: clamp(5px, 1.25vw, 20px);
   padding-bottom: 0;
+  overflow: hidden;
+}
+
+.score-bars.has-overflow {
+  grid-template-columns: repeat(var(--course-count, 1), minmax(108px, 1fr));
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
 }
 
 .score-bar-column {
-  min-width: 108px;
+  min-width: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: 24px minmax(0, 1fr) 42px 18px;
+  grid-template-rows: 22px minmax(0, 1fr) 40px 22px;
   align-items: end;
   justify-items: center;
-  gap: 5px;
+  gap: 0;
+}
+
+.score-bars.has-overflow .score-bar-column {
+  min-width: 108px;
 }
 
 .score-bar-column > strong {
@@ -819,7 +839,7 @@ body.dark-theme th{background:#1c2a3b;color:#c7d5e4}body.dark-theme td{border-co
 }
 
 .score-bar-shell {
-  width: min(56px, 58%);
+  width: min(58px, 72%);
   height: 100%;
   align-self: stretch;
   display: flex;
@@ -1068,7 +1088,7 @@ body.dark-theme .result-table thead th.final-score-column {
   }
 
   .score-bar-column {
-    min-width: 92px;
+    min-width: 0;
   }
 }
 
@@ -1538,3 +1558,341 @@ img.account-avatar {
 
 /* Final launcher typography and icon fix v1.4. */
 @import './launcher-font-layout-fix.scss';
+
+/* PATCH v1.8.9 final tooltip and course labels */
+
+/*
+ * Bố cục cuối:
+ * - mỗi cột có một điểm số riêng ở trên;
+ * - tên môn hiển thị tối đa 3 dòng;
+ * - chỉ còn một tooltip;
+ * - tooltip nền trắng đục, không bị lặp chữ;
+ * - không hiện thanh cuộn ngang.
+ */
+.semester-result-card {
+  min-width: 0;
+  overflow: visible;
+}
+
+.semester-score-chart {
+  display: block !important;
+  min-height: 370px !important;
+  padding: 14px 0 0 !important;
+  overflow: visible !important;
+}
+
+.score-y-axis {
+  display: none !important;
+}
+
+.score-plot {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 355px !important;
+  overflow: visible !important;
+  border: 0 !important;
+}
+
+.score-grid-lines {
+  position: absolute !important;
+  inset: 32px 0 74px 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  pointer-events: none !important;
+}
+
+.score-grid-lines i {
+  display: block !important;
+  width: 100% !important;
+  border-top: 1px dashed #d6e0ec !important;
+}
+
+.score-bars {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  gap: clamp(7px, 1.15vw, 15px) !important;
+  padding: 0 8px !important;
+  overflow: visible !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.score-bars::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.score-bar-column {
+  position: relative !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-rows:
+    25px
+    minmax(0, 1fr)
+    54px
+    14px !important;
+  gap: 4px !important;
+  align-items: end !important;
+  justify-items: center !important;
+  overflow: visible !important;
+  cursor: pointer !important;
+  outline: none !important;
+}
+
+.score-bar-column > strong {
+  position: static !important;
+  grid-row: 1 !important;
+  align-self: end !important;
+  width: 100% !important;
+  margin: 0 !important;
+  color: #10213f !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+.score-bar-shell {
+  position: static !important;
+  grid-row: 2 !important;
+  align-self: stretch !important;
+  width: min(52px, 70%) !important;
+  height: 100% !important;
+  min-height: 1px !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  transform: none !important;
+  border-radius: 8px 8px 0 0 !important;
+  background:
+    linear-gradient(
+      to top,
+      rgba(226, 234, 242, .68),
+      rgba(243, 247, 251, .96)
+    ) !important;
+  overflow: hidden !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.score-bar-shell > i {
+  display: block !important;
+  width: 100% !important;
+  min-height: 3px !important;
+  margin: 0 !important;
+  border-radius: 8px 8px 0 0 !important;
+  background:
+    linear-gradient(
+      180deg,
+      #ff8a6f 0%,
+      #ff6d55 100%
+    ) !important;
+  box-shadow:
+    0 -4px 12px rgba(255, 109, 85, .16) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.score-bar-column > span {
+  position: static !important;
+  grid-row: 3 !important;
+  align-self: start !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+  margin: 0 !important;
+  padding: 2px 1px 0 !important;
+  color: #324860 !important;
+  background: transparent !important;
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+  white-space: normal !important;
+  overflow: hidden !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.score-bar-column > span::before {
+  display: none !important;
+  content: none !important;
+}
+
+.score-bar-column > small {
+  position: static !important;
+  grid-row: 4 !important;
+  align-self: start !important;
+  width: 100% !important;
+  margin: 0 !important;
+  color: #9a5d00 !important;
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Loại bỏ tooltip HTML cũ để không còn chữ mờ/lặp. */
+.score-hover-tooltip {
+  display: none !important;
+}
+
+/* Chỉ một tooltip duy nhất từ data-course và data-score. */
+.score-bar-column::before {
+  content:
+    attr(data-course)
+    "\A"
+    "Điểm tổng kết: "
+    attr(data-score) !important;
+  position: absolute !important;
+  top: 46px !important;
+  left: 50% !important;
+  z-index: 1000 !important;
+  width: max-content !important;
+  min-width: 175px !important;
+  max-width: 225px !important;
+  padding: 10px 12px !important;
+  border: 1px solid #cfddea !important;
+  border-radius: 11px !important;
+  background: #ffffff !important;
+  box-shadow: 0 12px 28px rgba(20, 45, 75, .22) !important;
+  color: #21364d !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.45 !important;
+  text-align: left !important;
+  white-space: pre-line !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translate(-50%, 8px) !important;
+  transition:
+    opacity .16s ease,
+    transform .16s ease,
+    visibility .16s ease !important;
+}
+
+.score-bar-column::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 38px !important;
+  left: 50% !important;
+  z-index: 1001 !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-top: 1px solid #cfddea !important;
+  border-left: 1px solid #cfddea !important;
+  background: #ffffff !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateX(-50%) rotate(45deg) !important;
+  transition: opacity .16s ease, visibility .16s ease !important;
+}
+
+.score-bar-column:hover::before,
+.score-bar-column:focus-visible::before,
+.score-bar-column:focus-within::before,
+.score-bar-column:hover::after,
+.score-bar-column:focus-visible::after,
+.score-bar-column:focus-within::after {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.score-bar-column:hover::before,
+.score-bar-column:focus-visible::before,
+.score-bar-column:focus-within::before {
+  transform: translate(-50%, 0) !important;
+}
+
+.score-bar-column:first-child::before {
+  left: 0 !important;
+  transform: translate(0, 8px) !important;
+}
+
+.score-bar-column:first-child:hover::before,
+.score-bar-column:first-child:focus-visible::before {
+  transform: translate(0, 0) !important;
+}
+
+.score-bar-column:last-child::before {
+  right: 0 !important;
+  left: auto !important;
+  transform: translate(0, 8px) !important;
+}
+
+.score-bar-column:last-child:hover::before,
+.score-bar-column:last-child:focus-visible::before {
+  transform: translate(0, 0) !important;
+}
+
+.score-bar-column:hover .score-bar-shell > i,
+.score-bar-column:focus-visible .score-bar-shell > i {
+  filter: brightness(.94) saturate(1.08) !important;
+}
+
+body.dark-theme .score-bar-shell {
+  background:
+    linear-gradient(
+      to top,
+      rgba(50, 68, 88, .78),
+      rgba(38, 54, 73, .9)
+    ) !important;
+}
+
+body.dark-theme .score-bar-column > strong,
+body.dark-theme .score-bar-column > span {
+  color: var(--text) !important;
+}
+
+body.dark-theme .score-bar-column::before,
+body.dark-theme .score-bar-column::after {
+  border-color: #40546b !important;
+  background: #182738 !important;
+  color: #eef5fc !important;
+}
+
+@media (max-width: 640px) {
+  .semester-score-chart {
+    min-height: 345px !important;
+  }
+
+  .score-plot {
+    height: 330px !important;
+  }
+
+  .score-bars {
+    gap: 5px !important;
+    padding-inline: 4px !important;
+  }
+
+  .score-bar-column {
+    grid-template-rows:
+      23px
+      minmax(0, 1fr)
+      50px
+      12px !important;
+  }
+
+  .score-bar-shell {
+    width: min(46px, 74%) !important;
+  }
+
+  .score-bar-column > span {
+    font-size: 8px !important;
+  }
+}

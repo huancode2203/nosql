@@ -24,3 +24,12 @@ patch-backup-*/
 font-encoding-scan-report*.txt
 database-review.txt
 review-database.js
+
+# Local patch backups
+patch-backup-*/
+**/patch-backup-*/
+
+# Frontend generated files
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/

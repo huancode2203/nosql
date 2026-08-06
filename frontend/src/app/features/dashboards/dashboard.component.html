@@ -95,10 +95,18 @@
               </div>
               <div class="score-plot">
                 <div class="score-grid-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-                <div class="score-bars">
+                <div
+                  class="score-bars"
+                  [class.has-overflow]="chart.courses.length > 5"
+                  [style.--course-count]="chart.courses.length">
                   @for (course of chart.courses; track course.courseCode) {
-                    <div class="score-bar-column" [title]="course.courseName + ': ' + course.finalScore10 + '/10'">
-                      <strong>{{ course.finalScore10 }}</strong>
+                    <div
+                      class="score-bar-column"
+                      tabindex="0"
+                      [attr.data-course]="course.courseName"
+                      [attr.data-score]="course.finalScore10 + '/10'"
+                      [attr.aria-label]="course.courseName + ' - Điểm tổng kết ' + course.finalScore10 + '/10'">
+<strong>{{ course.finalScore10 }}</strong>
                       <div class="score-bar-shell"><i [style.height.%]="chartBarHeight(course.finalScore10)"></i></div>
                       <span>{{ course.courseName }}</span>
                       @if (course.excludeFromGpa) { <small>* Không tính GPA</small> }

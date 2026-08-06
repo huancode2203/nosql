@@ -127,6 +127,8 @@ export class StudentCurrentCoursesComponent implements OnInit {
   statusLabel(status: string): string {
     const values: Record<string, string> = {
       Draft: 'Đang cập nhật',
+      InProgress: 'Đang học',
+      Reopened: 'Đang cập nhật',
       Submitted: 'Chờ duyệt',
       Published: 'Đã công bố',
       Locked: 'Đã khóa'
