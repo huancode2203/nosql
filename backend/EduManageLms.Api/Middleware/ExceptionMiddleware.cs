@@ -37,11 +37,21 @@ public sealed class ExceptionMiddleware(
         }
     }
 
-    private static (int Status, string Message) MapException(
+    internal static (int Status, string Message) MapException(
         Exception exception)
     {
         if (exception is AppException appException)
             return (appException.StatusCode, appException.Message);
+
+        if (exception is MongoWriteException validationWrite
+                && validationWrite.WriteError.Code == 121
+            || exception is MongoCommandException validationCommand
+                && validationCommand.Code == 121)
+        {
+            return (
+                StatusCodes.Status400BadRequest,
+                "Dữ liệu chưa đúng cấu trúc bắt buộc. Vui lòng kiểm tra các trường đã nhập.");
+        }
 
         if (exception is MongoWriteException writeException
                 && writeException.WriteError.Category

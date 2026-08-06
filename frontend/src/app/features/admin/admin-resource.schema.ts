@@ -89,8 +89,8 @@ export const ADMIN_RESOURCE_FIELDS: Record<string, AdminFieldDefinition[]> = {
       ]
     },
     { key: 'dateOfBirth', label: 'Ngày sinh', type: 'date' },
-    { key: 'facultyId', label: 'Khoa', type: 'select', source: 'faculties', optionLabel: 'facultyName' },
-    { key: 'programId', label: 'Chương trình', type: 'select', source: 'programs', optionLabel: 'programName' },
+    { key: 'facultyId', label: 'Khoa', type: 'select', source: 'faculties', optionLabel: 'facultyName', required: true },
+    { key: 'programId', label: 'Chương trình', type: 'select', source: 'programs', optionLabel: 'programName', required: true },
     { key: 'cohort', label: 'Khóa tuyển sinh' },
     { key: 'administrativeClass', label: 'Lớp hành chính' },
     {

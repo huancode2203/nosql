@@ -154,6 +154,7 @@ public interface IAdminResourceService
 {
     Task<PagedResult<Dictionary<string, object?>>> ListAsync(string resource, string? search, bool deletedOnly, int page, int size, CancellationToken ct);
     Task<Dictionary<string, object?>> GetAsync(string resource, string id, CancellationToken ct);
+    Task<Dictionary<string, object?>> PrepareCreateAsync(string resource, Dictionary<string, object?> body, CancellationToken ct);
     Task<Dictionary<string, object?>> CreateAsync(string resource, Dictionary<string, object?> body, AdminActor actor, CancellationToken ct);
     Task<Dictionary<string, object?>> UpdateAsync(string resource, string id, Dictionary<string, object?> body, AdminActor actor, CancellationToken ct);
     Task DeleteAsync(string resource, string id, AdminActor actor, CancellationToken ct);

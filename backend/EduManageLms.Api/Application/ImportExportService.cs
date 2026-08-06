@@ -177,7 +177,7 @@ public sealed class ImportExportService(
                     $"Thiếu cột {string.Join(" hoặc ", alternatives)}");
 
         var rows = new List<ImportRowResult>();
-        var normalizedRows = new List<Dictionary<string, object?>>();
+        var preparedRows = new List<Dictionary<string, object?>>();
         var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var uniqueKey = UniqueImportField(resource);
 
@@ -195,6 +195,7 @@ public sealed class ImportExportService(
                 data,
                 errors,
                 ct);
+            RemoveImportOnlyReferenceCodes(resource, data);
 
             var key = data.GetValueOrDefault(uniqueKey)?.ToString()?.Trim()
                       ?? string.Empty;
@@ -231,13 +232,31 @@ public sealed class ImportExportService(
                     .AnyAsync(ct))
                 errors.Add("Email đăng nhập đã được tài khoản khác sử dụng");
 
+            Dictionary<string, object?>? prepared = null;
+            if (errors.Count == 0)
+            {
+                try
+                {
+                    // Xem trước và ghi thật dùng chung toàn bộ pipeline chuẩn bị dữ liệu.
+                    prepared = await adminResources.PrepareCreateAsync(
+                        resource,
+                        data,
+                        ct);
+                }
+                catch (AppException exception)
+                {
+                    errors.Add(exception.Message);
+                }
+            }
+
             rows.Add(
                 new ImportRowResult(
                     row.RowNumber(),
                     errors.Count == 0,
                     errors,
                     data));
-            normalizedRows.Add(data);
+            if (prepared is not null && errors.Count == 0)
+                preparedRows.Add(prepared);
         }
 
         if (commit)
@@ -245,7 +264,7 @@ public sealed class ImportExportService(
             if (rows.Any(row => !row.Valid))
                 throw new AppException(
                     "File còn dòng không hợp lệ; hãy sửa trước khi import");
-            foreach (var data in normalizedRows)
+            foreach (var data in preparedRows)
                 await adminResources.CreateAsync(
                     resource,
                     data,
@@ -265,7 +284,9 @@ public sealed class ImportExportService(
         {
             "students" =>
             [
-                ["studentCode"], ["fullName"], ["email"]
+                ["studentCode"], ["fullName"], ["email"],
+                ["facultyId", "facultyCode"],
+                ["programId", "programCode"]
             ],
             "lecturers" =>
             [
@@ -332,7 +353,7 @@ public sealed class ImportExportService(
                 "faculties",
                 "facultyCode",
                 "khoa",
-                required: false,
+                required: resource == "students",
                 errors,
                 ct);
 
@@ -344,7 +365,7 @@ public sealed class ImportExportService(
                 "programs",
                 "programCode",
                 "chương trình đào tạo",
-                required: false,
+                required: true,
                 errors,
                 ct);
 
@@ -508,6 +529,25 @@ public sealed class ImportExportService(
                 && value is not null)
                 data[field] = value.ToString()!.Trim().ToUpperInvariant();
     }
+
+    private static void RemoveImportOnlyReferenceCodes(
+        string resource,
+        Dictionary<string, object?> data)
+    {
+        if ((resource is "students" or "lecturers" or "programs" or "courses")
+            && HasResolvedId(data, "facultyId"))
+            data.Remove("facultyCode");
+        if (resource == "students" && HasResolvedId(data, "programId"))
+            data.Remove("programCode");
+        if (resource == "semesters" && HasResolvedId(data, "academicYearId"))
+            data.Remove("academicYearCode");
+    }
+
+    private static bool HasResolvedId(
+        IReadOnlyDictionary<string, object?> data,
+        string field) =>
+        data.TryGetValue(field, out var value)
+        && ObjectId.TryParse(value?.ToString(), out _);
 
     private static object? ConvertCellValue(IXLCell cell, string field)
     {

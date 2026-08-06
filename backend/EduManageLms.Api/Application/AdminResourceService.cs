@@ -72,13 +72,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         AdminActor actor,
         CancellationToken ct)
     {
-        SanitizeBody(resource, body);
-        NormalizeBody(resource, body);
-        await ResolveReferencesAsync(resource, body, ct);
-        NormalizeRolePermissions(resource, body);
-        ValidateResourceBody(resource, body, updating: false);
-        ValidateSpecializedFields(resource, body);
-        await EnsureUniqueAsync(resource, body, currentId: null, ct);
+        body = await PrepareCreateAsync(resource, body, ct);
 
         var document = ToBson(body);
         if (resource.Equals("users", StringComparison.OrdinalIgnoreCase))
@@ -132,6 +126,27 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         return Map(document);
     }
 
+    public async Task<Dictionary<string, object?>> PrepareCreateAsync(
+        string resource,
+        Dictionary<string, object?> body,
+        CancellationToken ct)
+    {
+        var prepared = new Dictionary<string, object?>(
+            body,
+            StringComparer.OrdinalIgnoreCase);
+
+        SanitizeBody(resource, prepared);
+        NormalizeBody(resource, prepared);
+        await ResolveReferencesAsync(resource, prepared, forCreate: true, ct);
+        AdminResourceCreatePolicy.ApplyStructuralDefaults(resource, prepared);
+        NormalizeRolePermissions(resource, prepared);
+        ValidateResourceBody(resource, prepared, updating: false);
+        ValidateSpecializedFields(resource, prepared);
+        await EnsureUniqueAsync(resource, prepared, currentId: null, ct);
+
+        return prepared;
+    }
+
     public async Task<Dictionary<string, object?>> UpdateAsync(
         string resource,
         string id,
@@ -148,7 +163,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
 
         SanitizeBody(resource, body);
         NormalizeBody(resource, body);
-        await ResolveReferencesAsync(resource, body, ct);
+        await ResolveReferencesAsync(resource, body, forCreate: false, ct);
         NormalizeRolePermissions(resource, body, existing);
         ValidateResourceBody(resource, body, updating: true);
         ValidateSpecializedFields(resource, body);
@@ -349,6 +364,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
     private async Task ResolveReferencesAsync(
         string resource,
         Dictionary<string, object?> body,
+        bool forCreate,
         CancellationToken ct)
     {
         if (resource.Equals("semesters", StringComparison.OrdinalIgnoreCase)
@@ -455,6 +471,8 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 body["courseId"] = course["_id"];
                 body["courseCode"] = course.GetValue("courseCode", "").AsString;
                 body["courseName"] = course.GetValue("courseName", "").AsString;
+                if (forCreate)
+                    body["gradingSchemeSnapshot"] = SelectGradingSchemeSnapshot(course);
             }
 
             if (TryId(body, "lecturerId", out var lecturerId))
@@ -549,6 +567,27 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             .FirstOrDefaultAsync(ct);
         return document
             ?? throw new AppException($"Không tìm thấy {label} đã chọn");
+    }
+
+    private static BsonDocument SelectGradingSchemeSnapshot(BsonDocument course)
+    {
+        var schemes = course.GetValue("gradingSchemes", new BsonArray());
+        if (!schemes.IsBsonArray)
+            throw new AppException(
+                "Môn học chưa có cấu trúc điểm hợp lệ. Hãy cấu hình điểm trước khi tạo lớp học phần.");
+
+        var selected = schemes.AsBsonArray
+            .Where(value => value.IsBsonDocument)
+            .Select(value => value.AsBsonDocument)
+            .Where(document => document.GetValue("active", true).ToBoolean())
+            .OrderByDescending(document => document.GetValue("version", 0).ToInt32())
+            .FirstOrDefault();
+
+        if (selected is null)
+            throw new AppException(
+                "Môn học chưa có cấu trúc điểm đang áp dụng. Hãy cấu hình điểm trước khi tạo lớp học phần.");
+
+        return selected.DeepClone().AsBsonDocument;
     }
 
     private async Task ResolveNotificationRecipientsAsync(
@@ -1149,7 +1188,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
             return;
         }
 
-        var required = RequiredFields(resource);
+        var required = AdminResourceCreatePolicy.RequiredFields(resource);
 
         var missing = required
             .Where(field => !body.TryGetValue(field, out var value) || string.IsNullOrWhiteSpace(ValueAsString(value)))
@@ -1173,7 +1212,7 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
         string resource,
         BsonDocument document)
     {
-        var missing = RequiredFields(resource)
+        var missing = AdminResourceCreatePolicy.RequiredFields(resource)
             .Where(field =>
                 !document.TryGetValue(field, out var value)
                 || value.IsBsonNull
@@ -1242,27 +1281,6 @@ public sealed class AdminResourceService(MongoContext db) : IAdminResourceServic
                 document.GetValue("lecturerCode", "").AsString))
             throw new AppException("Tài khoản giảng viên phải có mã giảng viên");
     }
-
-    private static string[] RequiredFields(string resource) => resource switch
-    {
-        "faculties" => ["facultyCode", "facultyName"],
-        "programs" => ["programCode", "programName"],
-        "academic-years" =>
-            ["academicYearCode", "academicYearName", "startDate", "endDate"],
-        "semesters" =>
-            [
-                "semesterCode", "semesterName", "academicYearId",
-                "startDate", "endDate"
-            ],
-        "courses" => ["courseCode", "courseName", "credits"],
-        "class-sections" => ["classSectionCode", "courseId", "lecturerId", "semesterId"],
-        "notifications" => ["title", "content"],
-        "system-settings" => ["key", "value"],
-        "users" => ["username", "email", "fullName", "role"],
-        "students" => ["studentCode", "fullName", "email"],
-        "lecturers" => ["lecturerCode", "fullName", "email"],
-        _ => []
-    };
 
     private static void ValidateSpecializedFields(
         string resource,
